@@ -23,17 +23,20 @@ Track after-hours calls and callback rates across Ringba call centers with real-
 
 1. Clone the repository
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Set up environment variables:
+
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
 4. Run the development server:
+
 ```bash
 npm run dev
 ```
@@ -43,6 +46,7 @@ npm run dev
 ## Database Setup
 
 Run the migrations in the `supabase/migrations` folder in order:
+
 1. `20241104000001_create_calls_table.sql`
 2. `20241104000002_create_analytics_view.sql`
 3. `20241104000003_create_callback_analytics.sql`
@@ -52,4 +56,3 @@ Run the migrations in the `supabase/migrations` folder in order:
 ## License
 
 MIT
-
