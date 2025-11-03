@@ -52,42 +52,42 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white via-blue-50 to-purple-50 p-4">
       {/* Animated background */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -inset-2.5 opacity-50">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
-          <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
-          <div className="absolute bottom-1/4 left-1/3 w-96 h-96 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
+        <div className="absolute -inset-2.5 opacity-40">
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
+          <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
+          <div className="absolute bottom-1/4 left-1/3 w-96 h-96 bg-cyan-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
         </div>
       </div>
 
       {/* Login Card */}
-      <Card className="w-full max-w-md relative z-10 shadow-2xl border-slate-700 bg-slate-800/90 backdrop-blur-lg">
+      <Card className="w-full max-w-md relative z-10 shadow-2xl border-slate-200 bg-white/95 backdrop-blur-lg">
         <CardHeader className="space-y-3 pb-6">
-          <div className="mx-auto w-16 h-16 bg-linear-to-br from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg">
+          <div className="mx-auto w-16 h-16 bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg">
             <PhoneCall className="w-8 h-8 text-white" />
           </div>
-          <CardTitle className="text-3xl font-bold text-center bg-linear-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-            Ringba Tracker
+          <CardTitle className="text-3xl font-bold text-center bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
+            Ringba After-Hours Tracker
           </CardTitle>
-          <CardDescription className="text-center text-slate-300 text-base">
-            Track after-hours calls and callbacks
+          <CardDescription className="text-center text-slate-600 text-base">
+            Track after-hours calls and callback rates across call centers
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-5">
             {error && (
-              <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/50 rounded-lg backdrop-blur-sm">
-                <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
-                <p className="text-sm text-red-300">{error}</p>
+              <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg backdrop-blur-sm">
+                <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+                <p className="text-sm text-red-700">{error}</p>
               </div>
             )}
 
             <div className="space-y-2">
               <label
                 htmlFor="email"
-                className="text-sm font-medium text-slate-200 flex items-center gap-2"
+                className="text-sm font-medium text-slate-700 flex items-center gap-2"
               >
                 <Mail className="w-4 h-4" />
                 Email Address
@@ -98,7 +98,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-slate-400 transition-all"
+                className="w-full px-4 py-3 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-slate-900 placeholder-slate-400 transition-all shadow-sm"
                 placeholder="admin@ringba.com"
               />
             </div>
@@ -106,7 +106,7 @@ export default function LoginPage() {
             <div className="space-y-2">
               <label
                 htmlFor="password"
-                className="text-sm font-medium text-slate-200 flex items-center gap-2"
+                className="text-sm font-medium text-slate-700 flex items-center gap-2"
               >
                 <Lock className="w-4 h-4" />
                 Password
@@ -117,14 +117,14 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-slate-400 transition-all"
+                className="w-full px-4 py-3 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-slate-900 placeholder-slate-400 transition-all shadow-sm"
                 placeholder="••••••••"
               />
             </div>
 
             <Button
               type="submit"
-              className="w-full bg-linear-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-semibold py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]"
+              className="w-full bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-500 hover:from-purple-600 hover:via-blue-600 hover:to-cyan-600 text-white font-semibold py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]"
               disabled={loading}
             >
               {loading ? (
