@@ -1,5 +1,5 @@
--- Create irev_data table for tracking revenue and conversion data
-CREATE TABLE IF NOT EXISTS public.irev_data (
+-- Create irev_leads table for tracking revenue and conversion data
+CREATE TABLE IF NOT EXISTS public.irev_leads (
   id BIGSERIAL PRIMARY KEY,
   
   -- Lead identification
@@ -45,33 +45,33 @@ CREATE TABLE IF NOT EXISTS public.irev_data (
 );
 
 -- Create indexes for better query performance
-CREATE INDEX IF NOT EXISTS idx_irev_data_lead_uuid ON public.irev_data(lead_uuid);
-CREATE INDEX IF NOT EXISTS idx_irev_data_timestampz ON public.irev_data(timestampz);
-CREATE INDEX IF NOT EXISTS idx_irev_data_created_at ON public.irev_data(created_at);
-CREATE INDEX IF NOT EXISTS idx_irev_data_traffic_source ON public.irev_data(traffic_source);
-CREATE INDEX IF NOT EXISTS idx_irev_data_product ON public.irev_data(product);
-CREATE INDEX IF NOT EXISTS idx_irev_data_affiliate_id ON public.irev_data(affiliate_id);
+CREATE INDEX IF NOT EXISTS idx_irev_leads_lead_uuid ON public.irev_leads(lead_uuid);
+CREATE INDEX IF NOT EXISTS idx_irev_leads_timestampz ON public.irev_leads(timestampz);
+CREATE INDEX IF NOT EXISTS idx_irev_leads_created_at ON public.irev_leads(created_at);
+CREATE INDEX IF NOT EXISTS idx_irev_leads_traffic_source ON public.irev_leads(traffic_source);
+CREATE INDEX IF NOT EXISTS idx_irev_leads_product ON public.irev_leads(product);
+CREATE INDEX IF NOT EXISTS idx_irev_leads_affiliate_id ON public.irev_leads(affiliate_id);
 
 -- Enable RLS
-ALTER TABLE public.irev_data ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.irev_leads ENABLE ROW LEVEL SECURITY;
 
 -- Create policy for authenticated users to read all data
-CREATE POLICY "Allow authenticated users to read irev data"
-  ON public.irev_data
+CREATE POLICY "Allow authenticated users to read irev leads"
+  ON public.irev_leads
   FOR SELECT
   TO authenticated
   USING (true);
 
 -- Create policy for service role to do everything
-CREATE POLICY "Allow service role full access to irev data"
-  ON public.irev_data
+CREATE POLICY "Allow service role full access to irev leads"
+  ON public.irev_leads
   FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
 
 -- Add trigger to automatically update updated_at timestamp
-CREATE OR REPLACE FUNCTION public.update_irev_data_updated_at()
+CREATE OR REPLACE FUNCTION public.update_irev_leads_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = NOW();
@@ -79,10 +79,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER update_irev_data_updated_at_trigger
-  BEFORE UPDATE ON public.irev_data
+CREATE TRIGGER update_irev_leads_updated_at_trigger
+  BEFORE UPDATE ON public.irev_leads
   FOR EACH ROW
-  EXECUTE FUNCTION public.update_irev_data_updated_at();
+  EXECUTE FUNCTION public.update_irev_leads_updated_at();
 
 -- Add comment to table
-COMMENT ON TABLE public.irev_data IS 'Stores revenue and conversion tracking data from irev webhooks';
+COMMENT ON TABLE public.irev_leads IS 'Stores revenue and conversion tracking data from irev webhooks';
