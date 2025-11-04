@@ -65,7 +65,7 @@ export function DateRangePicker({
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 bg-white border-slate-300 hover:bg-slate-50"
+              className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
               onClick={() => {
                 const today = new Date();
                 const startOfWeek = new Date(today);
@@ -78,7 +78,7 @@ export function DateRangePicker({
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 bg-white border-slate-300 hover:bg-slate-50"
+              className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
               onClick={() => {
                 const today = new Date();
                 const lastWeekEnd = new Date(today);
@@ -93,7 +93,7 @@ export function DateRangePicker({
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 bg-white border-slate-300 hover:bg-slate-50"
+              className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
               onClick={() => {
                 const today = new Date();
                 const sevenDaysAgo = new Date(today);
@@ -106,7 +106,7 @@ export function DateRangePicker({
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 bg-white border-slate-300 hover:bg-slate-50"
+              className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
               onClick={() => {
                 const today = new Date();
                 const startOfMonth = new Date(
@@ -122,7 +122,7 @@ export function DateRangePicker({
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 bg-white border-slate-300 hover:bg-slate-50"
+              className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
               onClick={() => {
                 const today = new Date();
                 const startOfYear = new Date(today.getFullYear(), 0, 1);
@@ -133,7 +133,7 @@ export function DateRangePicker({
             </Button>
             <Button
               size="sm"
-              className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white"
+              className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-medium"
               onClick={() => {
                 // Confirm button - close the popover (handled by PopoverTrigger)
               }}
