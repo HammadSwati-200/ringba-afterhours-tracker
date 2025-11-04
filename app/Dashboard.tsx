@@ -40,6 +40,19 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
+interface CallCenterStats {
+  callCenter: string;
+  operatingHours: string;
+  totalLeadsSent: number;
+  totalLeadsSentInHours: number;
+  totalUniqueCallsInHours: number;
+  callRateInHours: number;
+  totalLeadsSentAfterHours: number;
+  totalUniqueCallsAfterHours: number;
+  callRateAfterHours: number;
+  totalCallMissedAfterHours: number;
+}
+
 interface AfterHoursStats {
   totalCalls: number;
   totalInHours: number;
@@ -55,6 +68,7 @@ interface AfterHoursStats {
       rate: number;
     };
   };
+  callCenterStats: CallCenterStats[];
 }
 
 export function Dashboard() {
@@ -85,8 +99,9 @@ export function Dashboard() {
 
       console.log("Date Range:", dateRange, "days");
       console.log("Current Date:", new Date().toISOString());
-      console.log("Fetching calls from:", startDate.toISOString());
+      console.log("Fetching data from:", startDate.toISOString());
 
+      // Fetch calls from Ringba
       const { data: calls, error: fetchError } = await supabase
         .from("calls")
         .select("*")
@@ -98,7 +113,21 @@ export function Dashboard() {
         throw new Error(`Database error: ${fetchError.message}`);
       }
 
-      console.log("Fetched calls:", calls?.length);
+      // Fetch irev leads data
+      const { data: irevLeads, error: irevError } = await supabase
+        .from("irev_leads")
+        .select("*")
+        .gte("created_at", startDate.toISOString())
+        .order("created_at", { ascending: false });
+
+      if (irevError) {
+        console.error("Supabase irev error:", irevError);
+        throw new Error(`Database error: ${irevError.message}`);
+      }
+
+      console.log("Fetched calls:", calls?.length || 0);
+      console.log("Fetched irev leads:", irevLeads?.length || 0);
+
       if (calls && calls.length > 0) {
         console.log(
           "Sample call centers:",
@@ -106,7 +135,6 @@ export function Dashboard() {
         );
       }
 
-      console.log("Fetched calls:", calls?.length || 0);
       if (calls && calls.length > 0) {
         console.log("First call created:", calls[0].created_at);
         console.log("Last call created:", calls[calls.length - 1].created_at);
@@ -120,6 +148,7 @@ export function Dashboard() {
           totalCallbacks: 0,
           callbackRate: 0,
           byCallCenter: {},
+          callCenterStats: [],
         });
         setLoading(false);
         return;
@@ -210,6 +239,127 @@ export function Dashboard() {
         }
       });
 
+      // Build call center stats combining irev_leads and calls data
+      const callCenterStatsMap: { [key: string]: CallCenterStats } = {};
+
+      // Get all unique call centers from both sources
+      const allCallCenters = new Set<string>();
+
+      // Add from calls (call_center field)
+      calls.forEach((call) => {
+        if (call.call_center) allCallCenters.add(call.call_center);
+      });
+
+      // Add from irev_leads (utm_source field)
+      (irevLeads || []).forEach((lead) => {
+        if (lead.utm_source) allCallCenters.add(lead.utm_source);
+      });
+
+      // Process each call center
+      allCallCenters.forEach((centerIdRaw) => {
+        const centerId = centerIdRaw;
+
+        // Normalize ID for config lookup
+        const normalizedId = centerId.replace(/_/g, "");
+        const config = callCenterHours.find(
+          (cc) =>
+            cc.id.replace(/_/g, "") === normalizedId ||
+            cc.name.replace(/_/g, "") === normalizedId ||
+            cc.id === centerId ||
+            cc.name === centerId
+        );
+
+        const hasHours =
+          config &&
+          config.startHour !== undefined &&
+          config.endHour !== undefined;
+
+        const operatingHours = hasHours
+          ? formatOperatingHours(centerId)
+          : "No hours configured";
+
+        // Total leads sent from irev_leads (by utm_source)
+        const totalLeadsSent = (irevLeads || []).filter(
+          (lead) => lead.utm_source === centerId
+        ).length;
+
+        // Total leads sent in hours (irev_leads during operating hours)
+        const totalLeadsSentInHours = (irevLeads || []).filter((lead) => {
+          if (lead.utm_source !== centerId) return false;
+          const leadDate = new Date(lead.timestampz || lead.created_at);
+          return !isAfterHours(leadDate, centerId);
+        }).length;
+
+        // Total leads sent after hours (irev_leads outside operating hours)
+        const totalLeadsSentAfterHours = (irevLeads || []).filter((lead) => {
+          if (lead.utm_source !== centerId) return false;
+          const leadDate = new Date(lead.timestampz || lead.created_at);
+          return isAfterHours(leadDate, centerId);
+        }).length;
+
+        // Get all calls for this center
+        const centerCalls = calls.filter(
+          (call) => call.call_center === centerId
+        );
+
+        // Total unique calls in hours (Ringba calls during operating hours, unique by phone)
+        const callsInHours = centerCalls.filter((call) => {
+          const callDate = new Date(call.created_at || call.call_date);
+          return !isAfterHours(callDate, centerId);
+        });
+        const uniquePhoneNumbersInHours = new Set(
+          callsInHours.map((call) => call.caller_phone)
+        );
+        const totalUniqueCallsInHours = uniquePhoneNumbersInHours.size;
+
+        // Total unique calls after hours (Ringba calls outside operating hours, unique by phone)
+        const callsAfterHours = centerCalls.filter((call) => {
+          const callDate = new Date(call.created_at || call.call_date);
+          return isAfterHours(callDate, centerId);
+        });
+        const uniquePhoneNumbersAfterHours = new Set(
+          callsAfterHours.map((call) => call.caller_phone)
+        );
+        const totalUniqueCallsAfterHours = uniquePhoneNumbersAfterHours.size;
+
+        // Call rate in hours (unique calls / leads sent in hours)
+        const callRateInHours =
+          totalLeadsSentInHours > 0
+            ? (totalUniqueCallsInHours / totalLeadsSentInHours) * 100
+            : 0;
+
+        // Call rate after hours (unique calls / leads sent after hours)
+        const callRateAfterHours =
+          totalLeadsSentAfterHours > 0
+            ? (totalUniqueCallsAfterHours / totalLeadsSentAfterHours) * 100
+            : 0;
+
+        // Total calls missed after hours
+        // This is leads sent after hours minus unique calls made after hours
+        const totalCallMissedAfterHours = Math.max(
+          0,
+          totalLeadsSentAfterHours - totalUniqueCallsAfterHours
+        );
+
+        callCenterStatsMap[centerId] = {
+          callCenter: getCallCenterName(centerId),
+          operatingHours,
+          totalLeadsSent,
+          totalLeadsSentInHours,
+          totalUniqueCallsInHours,
+          callRateInHours,
+          totalLeadsSentAfterHours,
+          totalUniqueCallsAfterHours,
+          callRateAfterHours,
+          totalCallMissedAfterHours,
+        };
+      });
+
+      // Convert to array and sort by total leads sent
+      const callCenterStats = Object.values(callCenterStatsMap).sort(
+        (a, b) => b.totalLeadsSent - a.totalLeadsSent
+      );
+
       setStats({
         totalCalls: calls.length,
         totalInHours: inHoursCalls.length,
@@ -220,6 +370,7 @@ export function Dashboard() {
             ? (callbackCount / afterHoursCalls.length) * 100
             : 0,
         byCallCenter,
+        callCenterStats,
       });
     } catch (err: unknown) {
       console.error("Error loading stats:", err);
@@ -495,11 +646,11 @@ export function Dashboard() {
               Stats by Call Center
             </CardTitle>
             <CardDescription className="text-slate-600">
-              Detailed breakdown of after-hours performance
+              Comprehensive breakdown of leads and calls performance
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {stats && Object.keys(stats.byCallCenter).length > 0 ? (
+            {stats && stats.callCenterStats.length > 0 ? (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -511,91 +662,98 @@ export function Dashboard() {
                         Operating Hours
                       </TableHead>
                       <TableHead className="text-right text-slate-700 font-semibold">
-                        Total
+                        Total Leads Sent
                       </TableHead>
                       <TableHead className="text-right text-slate-700 font-semibold">
-                        In-Hours
+                        Leads Sent (In Hours)
                       </TableHead>
                       <TableHead className="text-right text-slate-700 font-semibold">
-                        After-Hours
+                        Unique Calls (In Hours)
                       </TableHead>
                       <TableHead className="text-right text-slate-700 font-semibold">
-                        Callbacks
+                        Call Rate % (In Hours)
                       </TableHead>
                       <TableHead className="text-right text-slate-700 font-semibold">
-                        Rate
+                        Leads Sent (After Hours)
+                      </TableHead>
+                      <TableHead className="text-right text-slate-700 font-semibold">
+                        Unique Calls (After Hours)
+                      </TableHead>
+                      <TableHead className="text-right text-slate-700 font-semibold">
+                        Call Rate % (After Hours)
+                      </TableHead>
+                      <TableHead className="text-right text-slate-700 font-semibold">
+                        Calls Missed After Hours
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {Object.entries(stats.byCallCenter)
-                      .sort((a, b) => b[1].total - a[1].total)
-                      .map(([centerId, centerStats]) => {
-                        // Check if this center has configured hours
-                        const normalizedId = centerId.replace(/_/g, "");
-                        const config = callCenterHours.find(
-                          (cc) =>
-                            cc.id.replace(/_/g, "") === normalizedId ||
-                            cc.name.replace(/_/g, "") === normalizedId ||
-                            cc.id === centerId ||
-                            cc.name === centerId
-                        );
-                        const hasHours =
-                          config &&
-                          config.startHour !== undefined &&
-                          config.endHour !== undefined;
-
-                        // If no hours configured, show a note in Operating Hours column
-                        const operatingHours = hasHours
-                          ? formatOperatingHours(centerId)
-                          : "No hours configured";
-
-                        return (
-                          <TableRow
-                            key={centerId}
-                            className="border-slate-200 hover:bg-slate-50"
-                          >
-                            <TableCell className="font-medium text-slate-900">
-                              {getCallCenterName(centerId)}
-                            </TableCell>
-                            <TableCell className="text-sm text-slate-600">
-                              {operatingHours}
-                            </TableCell>
-                            <TableCell className="text-right text-cyan-600 font-semibold">
-                              {centerStats.total}
-                            </TableCell>
-                            <TableCell className="text-right text-emerald-600 font-semibold">
-                              {centerStats.inHours}
-                            </TableCell>
-                            <TableCell className="text-right text-purple-600 font-semibold">
-                              {centerStats.afterHours}
-                            </TableCell>
-                            <TableCell className="text-right text-green-600 font-semibold">
-                              {centerStats.callbacks}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <span
-                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                  centerStats.rate >= 50
-                                    ? "bg-green-100 text-green-700 border border-green-300"
-                                    : centerStats.rate >= 25
-                                    ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
-                                    : "bg-red-100 text-red-700 border border-red-300"
-                                }`}
-                              >
-                                {centerStats.rate.toFixed(1)}%
-                              </span>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
+                    {stats.callCenterStats.map((centerStat) => {
+                      return (
+                        <TableRow
+                          key={centerStat.callCenter}
+                          className="border-slate-200 hover:bg-slate-50"
+                        >
+                          <TableCell className="font-medium text-slate-900">
+                            {centerStat.callCenter}
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-600">
+                            {centerStat.operatingHours}
+                          </TableCell>
+                          <TableCell className="text-right text-cyan-600 font-semibold">
+                            {centerStat.totalLeadsSent}
+                          </TableCell>
+                          <TableCell className="text-right text-emerald-600 font-semibold">
+                            {centerStat.totalLeadsSentInHours}
+                          </TableCell>
+                          <TableCell className="text-right text-blue-600 font-semibold">
+                            {centerStat.totalUniqueCallsInHours}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                centerStat.callRateInHours >= 50
+                                  ? "bg-green-100 text-green-700 border border-green-300"
+                                  : centerStat.callRateInHours >= 25
+                                  ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
+                                  : "bg-red-100 text-red-700 border border-red-300"
+                              }`}
+                            >
+                              {centerStat.callRateInHours.toFixed(1)}%
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right text-purple-600 font-semibold">
+                            {centerStat.totalLeadsSentAfterHours}
+                          </TableCell>
+                          <TableCell className="text-right text-indigo-600 font-semibold">
+                            {centerStat.totalUniqueCallsAfterHours}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                centerStat.callRateAfterHours >= 50
+                                  ? "bg-green-100 text-green-700 border border-green-300"
+                                  : centerStat.callRateAfterHours >= 25
+                                  ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
+                                  : "bg-red-100 text-red-700 border border-red-300"
+                              }`}
+                            >
+                              {centerStat.callRateAfterHours.toFixed(1)}%
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right text-red-600 font-semibold">
+                            {centerStat.totalCallMissedAfterHours}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
             ) : (
               <div className="text-center py-12 text-slate-500">
                 <PhoneCall className="mx-auto h-12 w-12 mb-4 opacity-30" />
-                <p>No after-hours calls found in the selected date range</p>
+                <p>No data found in the selected date range</p>
               </div>
             )}
           </CardContent>
