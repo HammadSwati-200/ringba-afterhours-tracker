@@ -31,14 +31,25 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   RefreshCw,
   TrendingUp,
   PhoneCall,
   Phone,
   LogOut,
   Info,
+  Download,
+  Filter,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { DateRangePicker } from "@/components/date-range-picker";
+import { DateRange } from "react-day-picker";
 
 interface CallCenterStats {
   callCenter: string;
@@ -75,14 +86,18 @@ export function Dashboard() {
   const [stats, setStats] = useState<AfterHoursStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dateRange, setDateRange] = useState(7); // Default to Last 7 Days for recent calls
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: new Date(new Date().setDate(new Date().getDate() - 7)),
+    to: new Date(),
+  });
+  const [selectedCallCenter, setSelectedCallCenter] = useState<string>("all");
   const router = useRouter();
   const supabase = createClient();
 
   useEffect(() => {
     loadStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange]);
+  }, [dateRange, selectedCallCenter]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -94,10 +109,19 @@ export function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - dateRange);
+      if (!dateRange?.from || !dateRange?.to) {
+        return;
+      }
 
-      console.log("Date Range:", dateRange, "days");
+      const startDate = dateRange.from;
+      const endDate = dateRange.to;
+
+      console.log(
+        "Date Range:",
+        startDate.toISOString(),
+        "to",
+        endDate.toISOString()
+      );
       console.log("Current Date:", new Date().toISOString());
       console.log("Fetching data from:", startDate.toISOString());
 
@@ -106,6 +130,7 @@ export function Dashboard() {
         .from("calls")
         .select("*")
         .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString())
         .order("created_at", { ascending: false });
 
       if (fetchError) {
@@ -118,6 +143,7 @@ export function Dashboard() {
         .from("irev_leads")
         .select("*")
         .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString())
         .order("created_at", { ascending: false });
 
       if (irevError) {
@@ -382,6 +408,79 @@ export function Dashboard() {
     }
   }
 
+  function exportData(format: "json" | "csv") {
+    if (!stats) return;
+
+    // Filter by selected call center
+    const dataToExport =
+      selectedCallCenter === "all"
+        ? stats.callCenterStats
+        : stats.callCenterStats.filter(
+            (center) => center.callCenter === selectedCallCenter
+          );
+
+    if (format === "json") {
+      const jsonString = JSON.stringify(dataToExport, null, 2);
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `ringba-stats-${
+        new Date().toISOString().split("T")[0]
+      }.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else if (format === "csv") {
+      // CSV headers
+      const headers = [
+        "Call Center",
+        "Operating Hours",
+        "Total Leads Sent",
+        "Leads Sent (In Hours)",
+        "Unique Calls (In Hours)",
+        "Call Rate % (In Hours)",
+        "Leads Sent (After Hours)",
+        "Unique Calls (After Hours)",
+        "Call Rate % (After Hours)",
+        "Calls Missed After Hours",
+      ];
+
+      // CSV rows
+      const rows = dataToExport.map((center) => [
+        center.callCenter,
+        center.operatingHours,
+        center.totalLeadsSent,
+        center.totalLeadsSentInHours,
+        center.totalUniqueCallsInHours,
+        center.callRateInHours.toFixed(2),
+        center.totalLeadsSentAfterHours,
+        center.totalUniqueCallsAfterHours,
+        center.callRateAfterHours.toFixed(2),
+        center.totalCallMissedAfterHours,
+      ]);
+
+      // Combine headers and rows
+      const csvContent = [
+        headers.join(","),
+        ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `ringba-stats-${
+        new Date().toISOString().split("T")[0]
+      }.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+  }
+
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -446,63 +545,46 @@ export function Dashboard() {
           </Button>
         </div>
 
-        {/* Date Range Filters */}
-        <div className="flex gap-2 flex-wrap">
-          <Button
-            variant={dateRange === 7 ? "default" : "outline"}
-            onClick={() => setDateRange(7)}
-            className={
-              dateRange === 7
-                ? "bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white border-0 shadow-md"
-                : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
-            }
+        {/* Date Range Filters & Controls */}
+        <div className="flex gap-3 flex-wrap items-center">
+          <DateRangePicker date={dateRange} setDate={setDateRange} />
+
+          <Select
+            value={selectedCallCenter}
+            onValueChange={setSelectedCallCenter}
           >
-            Last 7 Days
-          </Button>
+            <SelectTrigger className="w-[200px]">
+              <Filter className="mr-2 h-4 w-4" />
+              <SelectValue placeholder="Filter by Call Center" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Call Centers</SelectItem>
+              {stats?.callCenterStats.map((center) => (
+                <SelectItem key={center.callCenter} value={center.callCenter}>
+                  {center.callCenter}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Button
-            variant={dateRange === 30 ? "default" : "outline"}
-            onClick={() => setDateRange(30)}
-            className={
-              dateRange === 30
-                ? "bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white border-0 shadow-md"
-                : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
-            }
+            onClick={() => exportData("json")}
+            variant="outline"
+            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
           >
-            Last 30 Days
+            <Download className="mr-2 w-4 h-4" />
+            Export JSON
           </Button>
+
           <Button
-            variant={dateRange === 90 ? "default" : "outline"}
-            onClick={() => setDateRange(90)}
-            className={
-              dateRange === 90
-                ? "bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white border-0 shadow-md"
-                : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
-            }
+            onClick={() => exportData("csv")}
+            variant="outline"
+            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
           >
-            Last 90 Days
+            <Download className="mr-2 w-4 h-4" />
+            Export CSV
           </Button>
-          <Button
-            variant={dateRange === 365 ? "default" : "outline"}
-            onClick={() => setDateRange(365)}
-            className={
-              dateRange === 365
-                ? "bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white border-0 shadow-md"
-                : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
-            }
-          >
-            Last Year
-          </Button>
-          <Button
-            variant={dateRange === 9999 ? "default" : "outline"}
-            onClick={() => setDateRange(9999)}
-            className={
-              dateRange === 9999
-                ? "bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white border-0 shadow-md"
-                : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
-            }
-          >
-            All Time
-          </Button>
+
           <Button
             onClick={() => loadStats()}
             className="ml-auto bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
@@ -688,65 +770,71 @@ export function Dashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {stats.callCenterStats.map((centerStat) => {
-                      return (
-                        <TableRow
-                          key={centerStat.callCenter}
-                          className="border-slate-200 hover:bg-slate-50"
-                        >
-                          <TableCell className="font-medium text-slate-900">
-                            {centerStat.callCenter}
-                          </TableCell>
-                          <TableCell className="text-sm text-slate-600">
-                            {centerStat.operatingHours}
-                          </TableCell>
-                          <TableCell className="text-right text-cyan-600 font-semibold">
-                            {centerStat.totalLeadsSent}
-                          </TableCell>
-                          <TableCell className="text-right text-emerald-600 font-semibold">
-                            {centerStat.totalLeadsSentInHours}
-                          </TableCell>
-                          <TableCell className="text-right text-blue-600 font-semibold">
-                            {centerStat.totalUniqueCallsInHours}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span
-                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                centerStat.callRateInHours >= 50
-                                  ? "bg-green-100 text-green-700 border border-green-300"
-                                  : centerStat.callRateInHours >= 25
-                                  ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
-                                  : "bg-red-100 text-red-700 border border-red-300"
-                              }`}
-                            >
-                              {centerStat.callRateInHours.toFixed(1)}%
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right text-purple-600 font-semibold">
-                            {centerStat.totalLeadsSentAfterHours}
-                          </TableCell>
-                          <TableCell className="text-right text-indigo-600 font-semibold">
-                            {centerStat.totalUniqueCallsAfterHours}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span
-                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                centerStat.callRateAfterHours >= 50
-                                  ? "bg-green-100 text-green-700 border border-green-300"
-                                  : centerStat.callRateAfterHours >= 25
-                                  ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
-                                  : "bg-red-100 text-red-700 border border-red-300"
-                              }`}
-                            >
-                              {centerStat.callRateAfterHours.toFixed(1)}%
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right text-red-600 font-semibold">
-                            {centerStat.totalCallMissedAfterHours}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {stats.callCenterStats
+                      .filter(
+                        (center) =>
+                          selectedCallCenter === "all" ||
+                          center.callCenter === selectedCallCenter
+                      )
+                      .map((centerStat) => {
+                        return (
+                          <TableRow
+                            key={centerStat.callCenter}
+                            className="border-slate-200 hover:bg-slate-50"
+                          >
+                            <TableCell className="font-medium text-slate-900">
+                              {centerStat.callCenter}
+                            </TableCell>
+                            <TableCell className="text-sm text-slate-600">
+                              {centerStat.operatingHours}
+                            </TableCell>
+                            <TableCell className="text-right text-cyan-600 font-semibold">
+                              {centerStat.totalLeadsSent}
+                            </TableCell>
+                            <TableCell className="text-right text-emerald-600 font-semibold">
+                              {centerStat.totalLeadsSentInHours}
+                            </TableCell>
+                            <TableCell className="text-right text-blue-600 font-semibold">
+                              {centerStat.totalUniqueCallsInHours}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                  centerStat.callRateInHours >= 50
+                                    ? "bg-green-100 text-green-700 border border-green-300"
+                                    : centerStat.callRateInHours >= 25
+                                    ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
+                                    : "bg-red-100 text-red-700 border border-red-300"
+                                }`}
+                              >
+                                {centerStat.callRateInHours.toFixed(1)}%
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right text-purple-600 font-semibold">
+                              {centerStat.totalLeadsSentAfterHours}
+                            </TableCell>
+                            <TableCell className="text-right text-indigo-600 font-semibold">
+                              {centerStat.totalUniqueCallsAfterHours}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                  centerStat.callRateAfterHours >= 50
+                                    ? "bg-green-100 text-green-700 border border-green-300"
+                                    : centerStat.callRateAfterHours >= 25
+                                    ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
+                                    : "bg-red-100 text-red-700 border border-red-300"
+                                }`}
+                              >
+                                {centerStat.callRateAfterHours.toFixed(1)}%
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right text-red-600 font-semibold">
+                              {centerStat.totalCallMissedAfterHours}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                   </TableBody>
                 </Table>
               </div>
