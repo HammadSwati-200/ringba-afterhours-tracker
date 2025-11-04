@@ -12,6 +12,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#8b5cf6",
+};
+
 export const metadata: Metadata = {
   title: "Ringba After-Hours Tracker | Call Center Performance Analytics",
   description:
@@ -19,7 +25,6 @@ export const metadata: Metadata = {
   keywords:
     "ringba, call tracking, after hours calls, call center analytics, lead tracking, callback rates, call center performance, irev integration",
   authors: [{ name: "AI Wealth" }],
-  viewport: "width=device-width, initial-scale=1",
   robots: "noindex, nofollow",
   manifest: "/manifest.json",
   icons: {
