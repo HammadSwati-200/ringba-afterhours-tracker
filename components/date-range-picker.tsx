@@ -33,11 +33,11 @@ export function DateRangePicker({
             id="date"
             variant={"outline"}
             className={cn(
-              "w-[300px] justify-start text-left font-normal bg-white border-slate-300 hover:bg-slate-50",
-              !date && "text-muted-foreground"
+              "w-[300px] justify-start text-left font-medium bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-900",
+              !date && "text-slate-500"
             )}
           >
-            <CalendarIcon className="mr-2 h-4 w-4" />
+            <CalendarIcon className="mr-2 h-4 w-4 text-slate-600" />
             {date?.from ? (
               date.to ? (
                 <>

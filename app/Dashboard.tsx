@@ -559,8 +559,11 @@ export function Dashboard() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Call Centers</SelectItem>
-              {stats?.callCenterStats.map((center) => (
-                <SelectItem key={center.callCenter} value={center.callCenter}>
+              {stats?.callCenterStats.map((center, index) => (
+                <SelectItem
+                  key={`${center.callCenter}-${index}`}
+                  value={center.callCenter}
+                >
                   {center.callCenter}
                 </SelectItem>
               ))}
@@ -776,10 +779,10 @@ export function Dashboard() {
                           selectedCallCenter === "all" ||
                           center.callCenter === selectedCallCenter
                       )
-                      .map((centerStat) => {
+                      .map((centerStat, index) => {
                         return (
                           <TableRow
-                            key={centerStat.callCenter}
+                            key={`${centerStat.callCenter}-${index}`}
                             className="border-slate-200 hover:bg-slate-50"
                           >
                             <TableCell className="font-medium text-slate-900">
