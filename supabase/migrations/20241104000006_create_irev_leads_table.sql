@@ -5,6 +5,16 @@ CREATE TABLE IF NOT EXISTS public.irev_leads (
   -- Lead identification
   lead_uuid UUID NOT NULL,
   order_id TEXT,
+  cid TEXT,
+  click_id TEXT,
+  
+  -- Contact information
+  first_name TEXT,
+  last_name TEXT,
+  email TEXT,
+  email_norm TEXT,
+  phone_number TEXT,
+  phone_number_norm TEXT,
   
   -- Location data
   ip TEXT,
@@ -17,13 +27,15 @@ CREATE TABLE IF NOT EXISTS public.irev_leads (
   -- Status tracking
   sale_status TEXT,
   credit_limit_status TEXT,
-  credit_limit_amount TEXT,
+  credit_limit_amount INTEGER,
+  credit_limit_amount_raw TEXT,
   credit_score INTEGER,
   
   -- Funnel and traffic data
   funnel_name TEXT,
   traffic_source TEXT,
   checkout_source TEXT,
+  utm_source TEXT,
   ad_name TEXT,
   lander TEXT,
   
@@ -38,6 +50,9 @@ CREATE TABLE IF NOT EXISTS public.irev_leads (
   -- Customer data
   age INTEGER,
   
+  -- Raw data
+  raw_payload JSONB,
+  
   -- Timestamps
   timestampz TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -48,6 +63,10 @@ CREATE TABLE IF NOT EXISTS public.irev_leads (
 CREATE INDEX IF NOT EXISTS idx_irev_leads_lead_uuid ON public.irev_leads(lead_uuid);
 CREATE INDEX IF NOT EXISTS idx_irev_leads_timestampz ON public.irev_leads(timestampz);
 CREATE INDEX IF NOT EXISTS idx_irev_leads_created_at ON public.irev_leads(created_at);
+CREATE INDEX IF NOT EXISTS idx_irev_leads_cid ON public.irev_leads(cid);
+CREATE INDEX IF NOT EXISTS idx_irev_leads_email ON public.irev_leads(email);
+CREATE INDEX IF NOT EXISTS idx_irev_leads_phone_number ON public.irev_leads(phone_number);
+CREATE INDEX IF NOT EXISTS idx_irev_leads_click_id ON public.irev_leads(click_id);
 CREATE INDEX IF NOT EXISTS idx_irev_leads_traffic_source ON public.irev_leads(traffic_source);
 CREATE INDEX IF NOT EXISTS idx_irev_leads_product ON public.irev_leads(product);
 CREATE INDEX IF NOT EXISTS idx_irev_leads_affiliate_id ON public.irev_leads(affiliate_id);
