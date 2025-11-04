@@ -631,7 +631,7 @@ export function Dashboard() {
             date={dateRange}
             setDate={setDateRange}
             activeFilter={activeFilter}
-            setActiveFilter={setActiveFilter}
+            setActiveFilter={(filter) => setActiveFilter(filter || "")}
           />
 
           <Select
