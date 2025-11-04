@@ -31,6 +31,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -46,10 +52,12 @@ import {
   Info,
   Download,
   Filter,
+  X,
+  FileJson,
+  FileText,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { DateRangePicker } from "@/components/date-range-picker";
-import { DateRange } from "react-day-picker";
+import { DateRangePicker, DateRange } from "@/components/date-range-picker";
 
 interface CallCenterStats {
   callCenter: string;
@@ -93,6 +101,37 @@ export function Dashboard() {
   const [selectedCallCenter, setSelectedCallCenter] = useState<string>("all");
   const router = useRouter();
   const supabase = createClient();
+
+  // Sync filters with URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const startDate = params.get("startDate");
+    const endDate = params.get("endDate");
+    const callCenter = params.get("callCenter");
+
+    if (startDate && endDate) {
+      setDateRange({
+        from: new Date(startDate),
+        to: new Date(endDate),
+      });
+    }
+    if (callCenter) {
+      setSelectedCallCenter(callCenter);
+    }
+  }, []);
+
+  // Update URL when filters change
+  useEffect(() => {
+    if (dateRange?.from && dateRange?.to) {
+      const params = new URLSearchParams();
+      params.set("startDate", dateRange.from.toISOString().split("T")[0]);
+      params.set("endDate", dateRange.to.toISOString().split("T")[0]);
+      params.set("callCenter", selectedCallCenter);
+
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState({}, "", newUrl);
+    }
+  }, [dateRange, selectedCallCenter]);
 
   useEffect(() => {
     loadStats();
@@ -570,22 +609,41 @@ export function Dashboard() {
             </SelectContent>
           </Select>
 
-          <Button
-            onClick={() => exportData("json")}
-            variant="outline"
-            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
-          >
-            <Download className="mr-2 w-4 h-4" />
-            Export JSON
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
+              >
+                <Download className="mr-2 w-4 h-4" />
+                Export Data
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={() => exportData("json")}>
+                <FileJson className="mr-2 h-4 w-4" />
+                Export as JSON
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportData("csv")}>
+                <FileText className="mr-2 h-4 w-4" />
+                Export as CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <Button
-            onClick={() => exportData("csv")}
+            onClick={() => {
+              setDateRange({
+                from: new Date(new Date().setDate(new Date().getDate() - 7)),
+                to: new Date(),
+              });
+              setSelectedCallCenter("all");
+            }}
             variant="outline"
             className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
           >
-            <Download className="mr-2 w-4 h-4" />
-            Export CSV
+            <X className="mr-2 w-4 h-4" />
+            Clear Filters
           </Button>
 
           <Button
@@ -736,38 +794,38 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             {stats && stats.callCenterStats.length > 0 ? (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
                 <Table>
                   <TableHeader>
                     <TableRow className="border-slate-200 hover:bg-slate-50">
-                      <TableHead className="text-slate-700 font-semibold">
+                      <TableHead className="text-slate-700 font-semibold min-w-[150px] px-6">
                         Call Center
                       </TableHead>
-                      <TableHead className="text-slate-700 font-semibold">
+                      <TableHead className="text-slate-700 font-semibold min-w-[180px] px-6">
                         Operating Hours
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold">
+                      <TableHead className="text-right text-slate-700 font-semibold min-w-[150px] px-6">
                         Total Leads Sent
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold">
+                      <TableHead className="text-right text-slate-700 font-semibold min-w-[180px] px-6">
                         Leads Sent (In Hours)
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold">
+                      <TableHead className="text-right text-slate-700 font-semibold min-w-[180px] px-6">
                         Unique Calls (In Hours)
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold">
+                      <TableHead className="text-right text-slate-700 font-semibold min-w-[180px] px-6">
                         Call Rate % (In Hours)
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold">
+                      <TableHead className="text-right text-slate-700 font-semibold min-w-[200px] px-6">
                         Leads Sent (After Hours)
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold">
+                      <TableHead className="text-right text-slate-700 font-semibold min-w-[200px] px-6">
                         Unique Calls (After Hours)
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold">
+                      <TableHead className="text-right text-slate-700 font-semibold min-w-[200px] px-6">
                         Call Rate % (After Hours)
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold">
+                      <TableHead className="text-right text-slate-700 font-semibold min-w-[200px] px-6">
                         Calls Missed After Hours
                       </TableHead>
                     </TableRow>
@@ -785,22 +843,22 @@ export function Dashboard() {
                             key={`${centerStat.callCenter}-${index}`}
                             className="border-slate-200 hover:bg-slate-50"
                           >
-                            <TableCell className="font-medium text-slate-900">
+                            <TableCell className="font-medium text-slate-900 px-6">
                               {centerStat.callCenter}
                             </TableCell>
-                            <TableCell className="text-sm text-slate-600">
+                            <TableCell className="text-sm text-slate-600 px-6">
                               {centerStat.operatingHours}
                             </TableCell>
-                            <TableCell className="text-right text-cyan-600 font-semibold">
+                            <TableCell className="text-right text-cyan-600 font-semibold px-6">
                               {centerStat.totalLeadsSent}
                             </TableCell>
-                            <TableCell className="text-right text-emerald-600 font-semibold">
+                            <TableCell className="text-right text-emerald-600 font-semibold px-6">
                               {centerStat.totalLeadsSentInHours}
                             </TableCell>
-                            <TableCell className="text-right text-blue-600 font-semibold">
+                            <TableCell className="text-right text-blue-600 font-semibold px-6">
                               {centerStat.totalUniqueCallsInHours}
                             </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-right px-6">
                               <span
                                 className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                                   centerStat.callRateInHours >= 50
@@ -813,13 +871,13 @@ export function Dashboard() {
                                 {centerStat.callRateInHours.toFixed(1)}%
                               </span>
                             </TableCell>
-                            <TableCell className="text-right text-purple-600 font-semibold">
+                            <TableCell className="text-right text-purple-600 font-semibold px-6">
                               {centerStat.totalLeadsSentAfterHours}
                             </TableCell>
-                            <TableCell className="text-right text-indigo-600 font-semibold">
+                            <TableCell className="text-right text-indigo-600 font-semibold px-6">
                               {centerStat.totalUniqueCallsAfterHours}
                             </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-right px-6">
                               <span
                                 className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                                   centerStat.callRateAfterHours >= 50
@@ -832,7 +890,7 @@ export function Dashboard() {
                                 {centerStat.callRateAfterHours.toFixed(1)}%
                               </span>
                             </TableCell>
-                            <TableCell className="text-right text-red-600 font-semibold">
+                            <TableCell className="text-right text-red-600 font-semibold px-6">
                               {centerStat.totalCallMissedAfterHours}
                             </TableCell>
                           </TableRow>

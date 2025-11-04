@@ -1,18 +1,21 @@
 "use client";
 
 import * as React from "react";
-import { format } from "date-fns";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import { Calendar as CalendarIcon } from "lucide-react";
-import { DateRange } from "react-day-picker";
-
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+
+export interface DateRange {
+  from: Date | undefined;
+  to: Date | undefined;
+}
 
 interface DateRangePickerProps {
   date: DateRange | undefined;
@@ -25,9 +28,68 @@ export function DateRangePicker({
   setDate,
   className,
 }: DateRangePickerProps) {
+  const [startDate, setStartDate] = React.useState<Date | null>(
+    date?.from || null
+  );
+  const [endDate, setEndDate] = React.useState<Date | null>(date?.to || null);
+  const [isOpen, setIsOpen] = React.useState(false);
+
+  const onChange = (dates: [Date | null, Date | null]) => {
+    const [start, end] = dates;
+    setStartDate(start);
+    setEndDate(end);
+  };
+
+  const handleQuickSelect = (days: number, type: string) => {
+    const today = new Date();
+    let start: Date;
+    let end: Date = today;
+
+    switch (type) {
+      case "thisWeek":
+        start = new Date(today);
+        start.setDate(today.getDate() - today.getDay());
+        break;
+      case "lastWeek":
+        end = new Date(today);
+        end.setDate(today.getDate() - today.getDay() - 1);
+        start = new Date(end);
+        start.setDate(end.getDate() - 6);
+        break;
+      case "last7Days":
+        start = new Date(today);
+        start.setDate(today.getDate() - 7);
+        break;
+      case "thisMonth":
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+        break;
+      case "thisYear":
+        start = new Date(today.getFullYear(), 0, 1);
+        break;
+      default:
+        start = new Date(today);
+    }
+
+    setStartDate(start);
+    setEndDate(end);
+    setDate({ from: start, to: end });
+  };
+
+  const handleConfirm = () => {
+    if (startDate && endDate) {
+      setDate({ from: startDate, to: endDate });
+      setIsOpen(false);
+    }
+  };
+
+  const formatDate = (date: Date | null) => {
+    if (!date) return "";
+    return date.toISOString().split("T")[0];
+  };
+
   return (
     <div className={cn("grid gap-2", className)}>
-      <Popover>
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <Button
             id="date"
@@ -38,40 +100,34 @@ export function DateRangePicker({
             )}
           >
             <CalendarIcon className="mr-2 h-4 w-4 text-slate-600" />
-            {date?.from ? (
-              date.to ? (
-                <>
-                  {format(date.from, "yyyy-MM-dd")} →{" "}
-                  {format(date.to, "yyyy-MM-dd")}
-                </>
-              ) : (
-                format(date.from, "yyyy-MM-dd")
-              )
+            {startDate && endDate ? (
+              <>
+                {formatDate(startDate)} → {formatDate(endDate)}
+              </>
             ) : (
               <span>Pick a date range</span>
             )}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0 bg-white" align="start">
-          <Calendar
-            initialFocus
-            mode="range"
-            defaultMonth={date?.from}
-            selected={date}
-            onSelect={setDate}
-            numberOfMonths={2}
-          />
+          <div className="p-4">
+            <DatePicker
+              selected={startDate}
+              onChange={onChange}
+              startDate={startDate}
+              endDate={endDate}
+              selectsRange
+              inline
+              monthsShown={2}
+              calendarClassName="custom-datepicker"
+            />
+          </div>
           <div className="flex gap-2 p-3 border-t border-slate-200">
             <Button
               variant="outline"
               size="sm"
               className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
-              onClick={() => {
-                const today = new Date();
-                const startOfWeek = new Date(today);
-                startOfWeek.setDate(today.getDate() - today.getDay());
-                setDate({ from: startOfWeek, to: today });
-              }}
+              onClick={() => handleQuickSelect(0, "thisWeek")}
             >
               This Week
             </Button>
@@ -79,14 +135,7 @@ export function DateRangePicker({
               variant="outline"
               size="sm"
               className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
-              onClick={() => {
-                const today = new Date();
-                const lastWeekEnd = new Date(today);
-                lastWeekEnd.setDate(today.getDate() - today.getDay() - 1);
-                const lastWeekStart = new Date(lastWeekEnd);
-                lastWeekStart.setDate(lastWeekEnd.getDate() - 6);
-                setDate({ from: lastWeekStart, to: lastWeekEnd });
-              }}
+              onClick={() => handleQuickSelect(0, "lastWeek")}
             >
               Last Week
             </Button>
@@ -94,12 +143,7 @@ export function DateRangePicker({
               variant="outline"
               size="sm"
               className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
-              onClick={() => {
-                const today = new Date();
-                const sevenDaysAgo = new Date(today);
-                sevenDaysAgo.setDate(today.getDate() - 7);
-                setDate({ from: sevenDaysAgo, to: today });
-              }}
+              onClick={() => handleQuickSelect(7, "last7Days")}
             >
               Last 7 Days
             </Button>
@@ -107,15 +151,7 @@ export function DateRangePicker({
               variant="outline"
               size="sm"
               className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
-              onClick={() => {
-                const today = new Date();
-                const startOfMonth = new Date(
-                  today.getFullYear(),
-                  today.getMonth(),
-                  1
-                );
-                setDate({ from: startOfMonth, to: today });
-              }}
+              onClick={() => handleQuickSelect(0, "thisMonth")}
             >
               This Month
             </Button>
@@ -123,20 +159,14 @@ export function DateRangePicker({
               variant="outline"
               size="sm"
               className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
-              onClick={() => {
-                const today = new Date();
-                const startOfYear = new Date(today.getFullYear(), 0, 1);
-                setDate({ from: startOfYear, to: today });
-              }}
+              onClick={() => handleQuickSelect(0, "thisYear")}
             >
               This Year
             </Button>
             <Button
               size="sm"
               className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-medium"
-              onClick={() => {
-                // Confirm button - close the popover (handled by PopoverTrigger)
-              }}
+              onClick={handleConfirm}
             >
               Confirm
             </Button>
