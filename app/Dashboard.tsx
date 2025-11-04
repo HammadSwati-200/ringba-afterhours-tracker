@@ -99,6 +99,7 @@ export function Dashboard() {
     to: new Date(),
   });
   const [selectedCallCenter, setSelectedCallCenter] = useState<string>("all");
+  const [activeFilter, setActiveFilter] = useState<string>("last7Days");
   const router = useRouter();
   const supabase = createClient();
 
@@ -108,6 +109,7 @@ export function Dashboard() {
     const startDate = params.get("startDate");
     const endDate = params.get("endDate");
     const callCenter = params.get("callCenter");
+    const filter = params.get("filter");
 
     if (startDate && endDate) {
       setDateRange({
@@ -118,20 +120,47 @@ export function Dashboard() {
     if (callCenter) {
       setSelectedCallCenter(callCenter);
     }
+    if (filter) {
+      setActiveFilter(filter);
+    }
   }, []);
 
-  // Update URL when filters change
+  // Update URL when filters change (only if not default)
   useEffect(() => {
     if (dateRange?.from && dateRange?.to) {
-      const params = new URLSearchParams();
-      params.set("startDate", dateRange.from.toISOString().split("T")[0]);
-      params.set("endDate", dateRange.to.toISOString().split("T")[0]);
-      params.set("callCenter", selectedCallCenter);
+      const defaultStart = new Date(
+        new Date().setDate(new Date().getDate() - 7)
+      );
+      const defaultEnd = new Date();
 
-      const newUrl = `${window.location.pathname}?${params.toString()}`;
-      window.history.replaceState({}, "", newUrl);
+      const isDefaultDateRange =
+        dateRange.from.toISOString().split("T")[0] ===
+          defaultStart.toISOString().split("T")[0] &&
+        dateRange.to.toISOString().split("T")[0] ===
+          defaultEnd.toISOString().split("T")[0];
+
+      const isDefaultCallCenter = selectedCallCenter === "all";
+      const isDefaultFilter = activeFilter === "last7Days";
+
+      if (!isDefaultDateRange || !isDefaultCallCenter || !isDefaultFilter) {
+        const params = new URLSearchParams();
+        params.set("startDate", dateRange.from.toISOString().split("T")[0]);
+        params.set("endDate", dateRange.to.toISOString().split("T")[0]);
+        if (!isDefaultCallCenter) {
+          params.set("callCenter", selectedCallCenter);
+        }
+        if (activeFilter) {
+          params.set("filter", activeFilter);
+        }
+
+        const newUrl = `${window.location.pathname}?${params.toString()}`;
+        window.history.replaceState({}, "", newUrl);
+      } else {
+        // Clear params if back to default
+        window.history.replaceState({}, "", window.location.pathname);
+      }
     }
-  }, [dateRange, selectedCallCenter]);
+  }, [dateRange, selectedCallCenter, activeFilter]);
 
   useEffect(() => {
     loadStats();
@@ -549,12 +578,24 @@ export function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="w-12 h-12 animate-spin text-purple-600" />
-          <p className="text-xl text-slate-700 font-medium">
-            Loading statistics...
-          </p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="flex flex-col items-center gap-6">
+          <div className="relative">
+            {/* Outer ring */}
+            <div className="w-24 h-24 rounded-full border-4 border-slate-200"></div>
+            {/* Spinning ring */}
+            <div className="absolute top-0 left-0 w-24 h-24 rounded-full border-4 border-transparent border-t-purple-600 border-r-blue-600 animate-spin"></div>
+            {/* Inner pulsing circle */}
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 animate-pulse"></div>
+          </div>
+          <div className="text-center space-y-2">
+            <p className="text-2xl text-slate-800 font-semibold">
+              Loading Statistics
+            </p>
+            <p className="text-sm text-slate-600">
+              Fetching call center data...
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -586,22 +627,30 @@ export function Dashboard() {
 
         {/* Date Range Filters & Controls */}
         <div className="flex gap-3 flex-wrap items-center">
-          <DateRangePicker date={dateRange} setDate={setDateRange} />
+          <DateRangePicker
+            date={dateRange}
+            setDate={setDateRange}
+            activeFilter={activeFilter}
+            setActiveFilter={setActiveFilter}
+          />
 
           <Select
             value={selectedCallCenter}
             onValueChange={setSelectedCallCenter}
           >
-            <SelectTrigger className="w-[200px]">
-              <Filter className="mr-2 h-4 w-4" />
+            <SelectTrigger className="w-[200px] bg-white border-slate-300 hover:bg-slate-50 hover:border-slate-400 text-slate-900 font-medium shadow-sm">
+              <Filter className="mr-2 h-4 w-4 text-slate-600" />
               <SelectValue placeholder="Filter by Call Center" />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Call Centers</SelectItem>
+            <SelectContent className="bg-white border-slate-200 shadow-lg">
+              <SelectItem value="all" className="font-medium">
+                All Call Centers
+              </SelectItem>
               {stats?.callCenterStats.map((center, index) => (
                 <SelectItem
                   key={`${center.callCenter}-${index}`}
                   value={center.callCenter}
+                  className="font-medium"
                 >
                   {center.callCenter}
                 </SelectItem>
@@ -638,6 +687,7 @@ export function Dashboard() {
                 to: new Date(),
               });
               setSelectedCallCenter("all");
+              setActiveFilter("last7Days");
             }}
             variant="outline"
             className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
@@ -798,35 +848,165 @@ export function Dashboard() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-slate-200 hover:bg-slate-50">
-                      <TableHead className="text-slate-700 font-semibold min-w-[150px] px-6">
-                        Call Center
+                      <TableHead className="text-center text-slate-700 font-semibold min-w-[200px] px-6">
+                        <div className="flex items-center justify-center gap-2">
+                          Call Center
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">
+                                Name of the call center handling the leads and
+                                calls
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </TableHead>
-                      <TableHead className="text-slate-700 font-semibold min-w-[180px] px-6">
-                        Operating Hours
+                      <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
+                        <div className="flex items-center justify-center gap-2">
+                          Operating Hours
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">
+                                Business hours when the call center is actively
+                                staffed and taking calls
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold min-w-[150px] px-6">
-                        Total Leads Sent
+                      <TableHead className="text-center text-slate-700 font-semibold min-w-[200px] px-6">
+                        <div className="flex items-center justify-center gap-2">
+                          Total Leads Sent
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">
+                                Total number of leads sent to this call center
+                                (both during and after hours)
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold min-w-[180px] px-6">
-                        Leads Sent (In Hours)
+                      <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
+                        <div className="flex items-center justify-center gap-2">
+                          Leads Sent (In Hours)
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">
+                                Number of leads sent during business operating
+                                hours
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold min-w-[180px] px-6">
-                        Unique Calls (In Hours)
+                      <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
+                        <div className="flex items-center justify-center gap-2">
+                          Unique Calls (In Hours)
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">
+                                Number of unique phone numbers that called
+                                during business hours
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold min-w-[180px] px-6">
-                        Call Rate % (In Hours)
+                      <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
+                        <div className="flex items-center justify-center gap-2">
+                          Call Rate % (In Hours)
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">
+                                Percentage of leads that resulted in actual
+                                calls during business hours
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold min-w-[200px] px-6">
-                        Leads Sent (After Hours)
+                      <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
+                        <div className="flex items-center justify-center gap-2">
+                          Leads Sent (After Hours)
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">
+                                Number of leads sent outside of business
+                                operating hours
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold min-w-[200px] px-6">
-                        Unique Calls (After Hours)
+                      <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
+                        <div className="flex items-center justify-center gap-2">
+                          Unique Calls (After Hours)
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">
+                                Number of unique phone numbers that called after
+                                business hours
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold min-w-[200px] px-6">
-                        Call Rate % (After Hours)
+                      <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
+                        <div className="flex items-center justify-center gap-2">
+                          Call Rate % (After Hours)
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">
+                                Percentage of after-hours leads that resulted in
+                                actual calls
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </TableHead>
-                      <TableHead className="text-right text-slate-700 font-semibold min-w-[200px] px-6">
-                        Calls Missed After Hours
+                      <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
+                        <div className="flex items-center justify-center gap-2">
+                          Calls Missed After Hours
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">
+                                Number of calls that were not answered because
+                                they came in after hours
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -843,22 +1023,22 @@ export function Dashboard() {
                             key={`${centerStat.callCenter}-${index}`}
                             className="border-slate-200 hover:bg-slate-50"
                           >
-                            <TableCell className="font-medium text-slate-900 px-6">
+                            <TableCell className="text-center font-medium text-slate-900 px-6">
                               {centerStat.callCenter}
                             </TableCell>
-                            <TableCell className="text-sm text-slate-600 px-6">
+                            <TableCell className="text-center text-sm text-slate-600 px-6">
                               {centerStat.operatingHours}
                             </TableCell>
-                            <TableCell className="text-right text-cyan-600 font-semibold px-6">
+                            <TableCell className="text-center text-cyan-600 font-semibold px-6">
                               {centerStat.totalLeadsSent}
                             </TableCell>
-                            <TableCell className="text-right text-emerald-600 font-semibold px-6">
+                            <TableCell className="text-center text-emerald-600 font-semibold px-6">
                               {centerStat.totalLeadsSentInHours}
                             </TableCell>
-                            <TableCell className="text-right text-blue-600 font-semibold px-6">
+                            <TableCell className="text-center text-blue-600 font-semibold px-6">
                               {centerStat.totalUniqueCallsInHours}
                             </TableCell>
-                            <TableCell className="text-right px-6">
+                            <TableCell className="text-center px-6">
                               <span
                                 className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                                   centerStat.callRateInHours >= 50
@@ -871,13 +1051,13 @@ export function Dashboard() {
                                 {centerStat.callRateInHours.toFixed(1)}%
                               </span>
                             </TableCell>
-                            <TableCell className="text-right text-purple-600 font-semibold px-6">
+                            <TableCell className="text-center text-purple-600 font-semibold px-6">
                               {centerStat.totalLeadsSentAfterHours}
                             </TableCell>
-                            <TableCell className="text-right text-indigo-600 font-semibold px-6">
+                            <TableCell className="text-center text-indigo-600 font-semibold px-6">
                               {centerStat.totalUniqueCallsAfterHours}
                             </TableCell>
-                            <TableCell className="text-right px-6">
+                            <TableCell className="text-center px-6">
                               <span
                                 className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                                   centerStat.callRateAfterHours >= 50
@@ -890,7 +1070,7 @@ export function Dashboard() {
                                 {centerStat.callRateAfterHours.toFixed(1)}%
                               </span>
                             </TableCell>
-                            <TableCell className="text-right text-red-600 font-semibold px-6">
+                            <TableCell className="text-center text-red-600 font-semibold px-6">
                               {centerStat.totalCallMissedAfterHours}
                             </TableCell>
                           </TableRow>

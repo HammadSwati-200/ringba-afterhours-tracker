@@ -20,12 +20,16 @@ export interface DateRange {
 interface DateRangePickerProps {
   date: DateRange | undefined;
   setDate: (date: DateRange | undefined) => void;
+  activeFilter?: string;
+  setActiveFilter?: (filter: string | null) => void;
   className?: string;
 }
 
 export function DateRangePicker({
   date,
   setDate,
+  activeFilter: externalActiveFilter,
+  setActiveFilter: externalSetActiveFilter,
   className,
 }: DateRangePickerProps) {
   const [startDate, setStartDate] = React.useState<Date | null>(
@@ -33,11 +37,21 @@ export function DateRangePicker({
   );
   const [endDate, setEndDate] = React.useState<Date | null>(date?.to || null);
   const [isOpen, setIsOpen] = React.useState(false);
+  const [internalActiveFilter, setInternalActiveFilter] = React.useState<
+    string | null
+  >(externalActiveFilter || null);
+
+  const activeFilter =
+    externalActiveFilter !== undefined
+      ? externalActiveFilter
+      : internalActiveFilter;
+  const setActiveFilter = externalSetActiveFilter || setInternalActiveFilter;
 
   const onChange = (dates: [Date | null, Date | null]) => {
     const [start, end] = dates;
     setStartDate(start);
     setEndDate(end);
+    setActiveFilter(null); // Clear active filter when manually selecting
   };
 
   const handleQuickSelect = (days: number, type: string) => {
@@ -73,6 +87,7 @@ export function DateRangePicker({
     setStartDate(start);
     setEndDate(end);
     setDate({ from: start, to: end });
+    setActiveFilter(type); // Set active filter
   };
 
   const handleConfirm = () => {
@@ -126,7 +141,12 @@ export function DateRangePicker({
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
+              className={cn(
+                "flex-1 border-slate-300 hover:bg-slate-100 hover:border-slate-400 font-medium",
+                activeFilter === "thisWeek"
+                  ? "bg-slate-900 text-white hover:bg-slate-800 border-slate-900"
+                  : "bg-white text-slate-700"
+              )}
               onClick={() => handleQuickSelect(0, "thisWeek")}
             >
               This Week
@@ -134,7 +154,12 @@ export function DateRangePicker({
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
+              className={cn(
+                "flex-1 border-slate-300 hover:bg-slate-100 hover:border-slate-400 font-medium",
+                activeFilter === "lastWeek"
+                  ? "bg-slate-900 text-white hover:bg-slate-800 border-slate-900"
+                  : "bg-white text-slate-700"
+              )}
               onClick={() => handleQuickSelect(0, "lastWeek")}
             >
               Last Week
@@ -142,7 +167,12 @@ export function DateRangePicker({
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
+              className={cn(
+                "flex-1 border-slate-300 hover:bg-slate-100 hover:border-slate-400 font-medium",
+                activeFilter === "last7Days"
+                  ? "bg-slate-900 text-white hover:bg-slate-800 border-slate-900"
+                  : "bg-white text-slate-700"
+              )}
               onClick={() => handleQuickSelect(7, "last7Days")}
             >
               Last 7 Days
@@ -150,7 +180,12 @@ export function DateRangePicker({
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
+              className={cn(
+                "flex-1 border-slate-300 hover:bg-slate-100 hover:border-slate-400 font-medium",
+                activeFilter === "thisMonth"
+                  ? "bg-slate-900 text-white hover:bg-slate-800 border-slate-900"
+                  : "bg-white text-slate-700"
+              )}
               onClick={() => handleQuickSelect(0, "thisMonth")}
             >
               This Month
@@ -158,7 +193,12 @@ export function DateRangePicker({
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400 text-slate-700 font-medium"
+              className={cn(
+                "flex-1 border-slate-300 hover:bg-slate-100 hover:border-slate-400 font-medium",
+                activeFilter === "thisYear"
+                  ? "bg-slate-900 text-white hover:bg-slate-800 border-slate-900"
+                  : "bg-white text-slate-700"
+              )}
               onClick={() => handleQuickSelect(0, "thisYear")}
             >
               This Year
