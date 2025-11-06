@@ -94,9 +94,16 @@ export function Dashboard() {
   const [stats, setStats] = useState<AfterHoursStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: new Date(new Date().setDate(new Date().getDate() - 7)),
-    to: new Date(),
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(today.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+    return {
+      from: sevenDaysAgo,
+      to: today,
+    };
   });
   const [selectedCallCenter, setSelectedCallCenter] = useState<string>("all");
   const [activeFilter, setActiveFilter] = useState<string>("last7Days");
@@ -112,9 +119,13 @@ export function Dashboard() {
     const filter = params.get("filter");
 
     if (startDate && endDate) {
+      const from = new Date(startDate);
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(endDate);
+      to.setHours(0, 0, 0, 0);
       setDateRange({
-        from: new Date(startDate),
-        to: new Date(endDate),
+        from,
+        to,
       });
     }
     if (callCenter) {
@@ -128,10 +139,12 @@ export function Dashboard() {
   // Update URL when filters change (only if not default)
   useEffect(() => {
     if (dateRange?.from && dateRange?.to) {
-      const defaultStart = new Date(
-        new Date().setDate(new Date().getDate() - 7)
-      );
-      const defaultEnd = new Date();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const defaultStart = new Date(today);
+      defaultStart.setDate(today.getDate() - 7);
+      defaultStart.setHours(0, 0, 0, 0);
+      const defaultEnd = new Date(today);
 
       const isDefaultDateRange =
         dateRange.from.toISOString().split("T")[0] ===
@@ -616,24 +629,10 @@ export function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
-        <div className="flex flex-col items-center gap-6">
-          <div className="relative">
-            {/* Outer ring */}
-            <div className="w-24 h-24 rounded-full border-4 border-slate-200"></div>
-            {/* Spinning ring */}
-            <div className="absolute top-0 left-0 w-24 h-24 rounded-full border-4 border-transparent border-t-purple-600 border-r-blue-600 animate-spin"></div>
-            {/* Inner pulsing circle */}
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 animate-pulse"></div>
-          </div>
-          <div className="text-center space-y-2">
-            <p className="text-2xl text-slate-800 font-semibold">
-              Loading Statistics
-            </p>
-            <p className="text-sm text-slate-600">
-              Fetching call center data...
-            </p>
-          </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-slate-200 border-t-purple-600 rounded-full animate-spin"></div>
+          <p className="text-slate-700 text-base">Loading statistics...</p>
         </div>
       </div>
     );
@@ -721,9 +720,14 @@ export function Dashboard() {
 
             <Button
               onClick={() => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const sevenDaysAgo = new Date(today);
+                sevenDaysAgo.setDate(today.getDate() - 7);
+                sevenDaysAgo.setHours(0, 0, 0, 0);
                 setDateRange({
-                  from: new Date(new Date().setDate(new Date().getDate() - 7)),
-                  to: new Date(),
+                  from: sevenDaysAgo,
+                  to: today,
                 });
                 setSelectedCallCenter("all");
                 setActiveFilter("last7Days");

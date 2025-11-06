@@ -56,32 +56,42 @@ export function DateRangePicker({
 
   const handleQuickSelect = (days: number, type: string) => {
     const today = new Date();
+    // Reset today to start of day (00:00:00)
+    today.setHours(0, 0, 0, 0);
+
     let start: Date;
-    let end: Date = today;
+    let end: Date = new Date(today);
 
     switch (type) {
       case "thisWeek":
         start = new Date(today);
         start.setDate(today.getDate() - today.getDay());
+        start.setHours(0, 0, 0, 0);
         break;
       case "lastWeek":
         end = new Date(today);
         end.setDate(today.getDate() - today.getDay() - 1);
+        end.setHours(0, 0, 0, 0);
         start = new Date(end);
         start.setDate(end.getDate() - 6);
+        start.setHours(0, 0, 0, 0);
         break;
       case "last7Days":
         start = new Date(today);
         start.setDate(today.getDate() - 7);
+        start.setHours(0, 0, 0, 0);
         break;
       case "thisMonth":
         start = new Date(today.getFullYear(), today.getMonth(), 1);
+        start.setHours(0, 0, 0, 0);
         break;
       case "thisYear":
         start = new Date(today.getFullYear(), 0, 1);
+        start.setHours(0, 0, 0, 0);
         break;
       default:
         start = new Date(today);
+        start.setHours(0, 0, 0, 0);
     }
 
     setStartDate(start);
