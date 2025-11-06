@@ -248,16 +248,15 @@ export function Dashboard() {
         return;
       }
 
-      // Separate calls into in-hours and after-hours
-      // Use created_at since call_date may have wrong timestamps from Ringba
-      const afterHoursCalls = calls.filter((call) => {
-        const callDate = new Date(call.created_at || call.call_date);
-        return isAfterHours(callDate, call.call_center);
+      // Separate calls into in-hours and after-hours based on publisher_name
+      // If publisher_name does NOT contain "SMS" -> In Hours call
+      // If publisher_name contains "SMS" -> After Hours call
+      const inHoursCalls = calls.filter((call) => {
+        return !call.publisher_name?.includes("SMS");
       });
 
-      const inHoursCalls = calls.filter((call) => {
-        const callDate = new Date(call.created_at || call.call_date);
-        return !isAfterHours(callDate, call.call_center);
+      const afterHoursCalls = calls.filter((call) => {
+        return call.publisher_name?.includes("SMS");
       });
 
       console.log("Total calls:", calls.length);
@@ -280,7 +279,7 @@ export function Dashboard() {
             call.caller_phone === afterHoursCall.caller_phone &&
             callDate > afterHoursDate &&
             callDate <= maxCallbackDate &&
-            !isAfterHours(callDate, call.call_center) &&
+            !call.publisher_name?.includes("SMS") && // In-hours callback (no SMS)
             call.call_center === afterHoursCall.call_center
           );
         });
@@ -316,11 +315,11 @@ export function Dashboard() {
         }
         byCallCenter[centerId].total++;
 
-        const callDate = new Date(call.call_date);
-        if (isAfterHours(callDate, centerId)) {
-          byCallCenter[centerId].afterHours++;
-        } else {
+        // Use publisher_name to determine in-hours vs after-hours
+        if (!call.publisher_name?.includes("SMS")) {
           byCallCenter[centerId].inHours++;
+        } else {
+          byCallCenter[centerId].afterHours++;
         }
       });
 
@@ -377,14 +376,14 @@ export function Dashboard() {
           (lead) => lead.utm_source === centerId
         ).length;
 
-        // Total leads sent in hours (irev_leads during operating hours)
+        // Total leads sent in hours (irev_leads during operating hours based on timestamp)
         const totalLeadsSentInHours = (irevLeads || []).filter((lead) => {
           if (lead.utm_source !== centerId) return false;
           const leadDate = new Date(lead.timestampz || lead.created_at);
           return !isAfterHours(leadDate, centerId);
         }).length;
 
-        // Total leads sent after hours (irev_leads outside operating hours)
+        // Total leads sent after hours (irev_leads outside operating hours based on timestamp)
         const totalLeadsSentAfterHours = (irevLeads || []).filter((lead) => {
           if (lead.utm_source !== centerId) return false;
           const leadDate = new Date(lead.timestampz || lead.created_at);
@@ -396,20 +395,18 @@ export function Dashboard() {
           (call) => call.call_center === centerId
         );
 
-        // Total unique calls in hours (Ringba calls during operating hours, unique by phone)
+        // Total unique calls in hours (Ringba calls without "SMS" in publisher_name, unique by phone)
         const callsInHours = centerCalls.filter((call) => {
-          const callDate = new Date(call.created_at || call.call_date);
-          return !isAfterHours(callDate, centerId);
+          return !call.publisher_name?.includes("SMS");
         });
         const uniquePhoneNumbersInHours = new Set(
           callsInHours.map((call) => call.caller_phone)
         );
         const totalUniqueCallsInHours = uniquePhoneNumbersInHours.size;
 
-        // Total unique calls after hours (Ringba calls outside operating hours, unique by phone)
+        // Total unique calls after hours (Ringba calls with "SMS" in publisher_name, unique by phone)
         const callsAfterHours = centerCalls.filter((call) => {
-          const callDate = new Date(call.created_at || call.call_date);
-          return isAfterHours(callDate, centerId);
+          return call.publisher_name?.includes("SMS");
         });
         const uniquePhoneNumbersAfterHours = new Set(
           callsAfterHours.map((call) => call.caller_phone)
@@ -551,7 +548,7 @@ export function Dashboard() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center px-4">
         <Card className="w-full max-w-md bg-white border-slate-200 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-red-600">
@@ -603,490 +600,492 @@ export function Dashboard() {
 
   return (
     <TooltipProvider>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
-              Ringba After-Hours Tracker
-            </h1>
-            <p className="text-slate-600 mt-2 text-lg">
-              Track after-hours calls and callback rates across call centers
-            </p>
+      <div className="w-full px-4 sm:px-[50px]">
+        <div className="max-w-[2000px] mx-auto space-y-6">
+          {/* Header */}
+          <div className="flex items-start justify-between flex-wrap gap-4">
+            <div>
+              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                Ringba After-Hours Tracker
+              </h1>
+              <p className="text-slate-600 mt-2 text-lg">
+                Track after-hours calls and callback rates across call centers
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleLogout}
+              size="sm"
+              className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-sm"
+            >
+              <LogOut className="mr-2 w-4 h-4" />
+              Logout
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleLogout}
-            size="sm"
-            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-sm"
-          >
-            <LogOut className="mr-2 w-4 h-4" />
-            Logout
-          </Button>
-        </div>
 
-        {/* Date Range Filters & Controls */}
-        <div className="flex gap-3 flex-wrap items-center">
-          <DateRangePicker
-            date={dateRange}
-            setDate={setDateRange}
-            activeFilter={activeFilter}
-            setActiveFilter={(filter) => setActiveFilter(filter || "")}
-          />
+          {/* Date Range Filters & Controls */}
+          <div className="flex gap-3 flex-wrap items-center">
+            <DateRangePicker
+              date={dateRange}
+              setDate={setDateRange}
+              activeFilter={activeFilter}
+              setActiveFilter={(filter) => setActiveFilter(filter || "")}
+            />
 
-          <Select
-            value={selectedCallCenter}
-            onValueChange={setSelectedCallCenter}
-          >
-            <SelectTrigger className="w-[200px] bg-white border-slate-300 hover:bg-slate-50 hover:border-slate-400 text-slate-900 font-medium shadow-sm">
-              <Filter className="mr-2 h-4 w-4 text-slate-600" />
-              <SelectValue placeholder="Filter by Call Center" />
-            </SelectTrigger>
-            <SelectContent className="bg-white border-slate-200 shadow-lg">
-              <SelectItem value="all" className="font-medium">
-                All Call Centers
-              </SelectItem>
-              {stats?.callCenterStats.map((center, index) => (
-                <SelectItem
-                  key={`${center.callCenter}-${index}`}
-                  value={center.callCenter}
-                  className="font-medium"
-                >
-                  {center.callCenter}
+            <Select
+              value={selectedCallCenter}
+              onValueChange={setSelectedCallCenter}
+            >
+              <SelectTrigger className="w-[200px] bg-white border-slate-300 hover:bg-slate-50 hover:border-slate-400 text-slate-900 font-medium shadow-sm">
+                <Filter className="mr-2 h-4 w-4 text-slate-600" />
+                <SelectValue placeholder="Filter by Call Center" />
+              </SelectTrigger>
+              <SelectContent className="bg-white border-slate-200 shadow-lg">
+                <SelectItem value="all" className="font-medium">
+                  All Call Centers
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                {stats?.callCenterStats.map((center, index) => (
+                  <SelectItem
+                    key={`${center.callCenter}-${index}`}
+                    value={center.callCenter}
+                    className="font-medium"
+                  >
+                    {center.callCenter}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
-              >
-                <Download className="mr-2 w-4 h-4" />
-                Export Data
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => exportData("json")}>
-                <FileJson className="mr-2 h-4 w-4" />
-                Export as JSON
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportData("csv")}>
-                <FileText className="mr-2 h-4 w-4" />
-                Export as CSV
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
+                >
+                  <Download className="mr-2 w-4 h-4" />
+                  Export Data
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => exportData("json")}>
+                  <FileJson className="mr-2 h-4 w-4" />
+                  Export as JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportData("csv")}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Export as CSV
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-          <Button
-            onClick={() => {
-              setDateRange({
-                from: new Date(new Date().setDate(new Date().getDate() - 7)),
-                to: new Date(),
-              });
-              setSelectedCallCenter("all");
-              setActiveFilter("last7Days");
-            }}
-            variant="outline"
-            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
-          >
-            <X className="mr-2 w-4 h-4" />
-            Clear Filters
-          </Button>
+            <Button
+              onClick={() => {
+                setDateRange({
+                  from: new Date(new Date().setDate(new Date().getDate() - 7)),
+                  to: new Date(),
+                });
+                setSelectedCallCenter("all");
+                setActiveFilter("last7Days");
+              }}
+              variant="outline"
+              className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
+            >
+              <X className="mr-2 w-4 h-4" />
+              Clear Filters
+            </Button>
 
-          <Button
-            onClick={() => loadStats()}
-            className="ml-auto bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
-          >
-            <RefreshCw className="mr-2 w-4 h-4" />
-            Refresh
-          </Button>
+            <Button
+              onClick={() => loadStats()}
+              className="ml-auto bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm"
+            >
+              <RefreshCw className="mr-2 w-4 h-4" />
+              Refresh
+            </Button>
+          </div>
+
+          {/* Stats Cards */}
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card className="bg-gradient-to-br from-white to-cyan-50 border-cyan-200 hover:border-cyan-400 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-200/50 shadow-md">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                  Total Calls
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-xs">
+                        All calls received in the selected date range, including
+                        both in-hours and after-hours calls.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </CardTitle>
+                <div className="p-2 bg-cyan-100 rounded-lg">
+                  <PhoneCall className="h-5 w-5 text-cyan-600" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-slate-900">
+                  {stats?.totalCalls || 0}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  All calls in selected period
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-white to-emerald-50 border-emerald-200 hover:border-emerald-400 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-200/50 shadow-md">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                  In-Hours Leads
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-xs">
+                        Calls received during each call center&apos;s configured
+                        operating hours and days of the week.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </CardTitle>
+                <div className="p-2 bg-emerald-100 rounded-lg">
+                  <Phone className="h-5 w-5 text-emerald-600" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-slate-900">
+                  {stats?.totalInHours || 0}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Calls during business hours
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-white to-purple-50 border-purple-200 hover:border-purple-400 transition-all duration-300 hover:shadow-lg hover:shadow-purple-200/50 shadow-md">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                  After-Hours Leads
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-xs">
+                        Calls received outside each call center&apos;s
+                        configured operating hours or on non-operating days.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </CardTitle>
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <PhoneCall className="h-5 w-5 text-purple-600" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-slate-900">
+                  {stats?.totalAfterHours || 0}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Calls received outside business hours
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-white to-orange-50 border-orange-200 hover:border-orange-400 transition-all duration-300 hover:shadow-lg hover:shadow-orange-200/50 shadow-md">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                  Callbacks
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-xs">
+                        Calls from the same phone number within 48 hours during
+                        business hours after an initial after-hours call. Rate
+                        shows the percentage of after-hours leads that
+                        successfully called back.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </CardTitle>
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <TrendingUp className="h-5 w-5 text-orange-600" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-slate-900">
+                  {stats?.totalCallbacks || 0}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  {stats?.totalAfterHours
+                    ? `${stats.callbackRate.toFixed(1)}% callback rate`
+                    : "No after-hours calls yet"}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Table Section */}
+          <Card className="bg-gradient-to-br from-white to-slate-50 border-slate-200 shadow-md hover:shadow-lg transition-shadow duration-300">
+            <CardHeader>
+              <CardTitle className="text-slate-900">
+                Stats by Call Center
+              </CardTitle>
+              <CardDescription className="text-slate-600">
+                Comprehensive breakdown of leads and calls performance
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {stats && stats.callCenterStats.length > 0 ? (
+                <div className="overflow-x-auto rounded-lg border border-slate-200">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-slate-200 hover:bg-slate-50">
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-[200px] px-6">
+                          <div className="flex items-center justify-center gap-2">
+                            Call Center
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">
+                                  Name of the call center handling the leads and
+                                  calls
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
+                          <div className="flex items-center justify-center gap-2">
+                            Operating Hours
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">
+                                  Business hours when the call center is
+                                  actively staffed and taking calls
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-[200px] px-6">
+                          <div className="flex items-center justify-center gap-2">
+                            Total Leads Sent
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">
+                                  Total number of leads sent to this call center
+                                  (both during and after hours)
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
+                          <div className="flex items-center justify-center gap-2">
+                            Leads Sent (In Hours)
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">
+                                  Number of leads sent during business operating
+                                  hours
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
+                          <div className="flex items-center justify-center gap-2">
+                            Unique Calls (In Hours)
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">
+                                  Number of unique phone numbers that called
+                                  during business hours
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
+                          <div className="flex items-center justify-center gap-2">
+                            Call Rate % (In Hours)
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">
+                                  Percentage of leads that resulted in actual
+                                  calls during business hours
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
+                          <div className="flex items-center justify-center gap-2">
+                            Leads Sent (After Hours)
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">
+                                  Number of leads sent outside of business
+                                  operating hours
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
+                          <div className="flex items-center justify-center gap-2">
+                            Unique Calls (After Hours)
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">
+                                  Number of unique phone numbers that called
+                                  after business hours
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
+                          <div className="flex items-center justify-center gap-2">
+                            Call Rate % (After Hours)
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">
+                                  Percentage of after-hours leads that resulted
+                                  in actual calls
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
+                          <div className="flex items-center justify-center gap-2">
+                            Calls Missed After Hours
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">
+                                  Number of calls that were not answered because
+                                  they came in after hours
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {stats.callCenterStats
+                        .filter(
+                          (center) =>
+                            selectedCallCenter === "all" ||
+                            center.callCenter === selectedCallCenter
+                        )
+                        .map((centerStat, index) => {
+                          return (
+                            <TableRow
+                              key={`${centerStat.callCenter}-${index}`}
+                              className="border-slate-200 hover:bg-slate-50"
+                            >
+                              <TableCell className="text-center font-medium text-slate-900 px-6">
+                                {centerStat.callCenter}
+                              </TableCell>
+                              <TableCell className="text-center text-sm text-slate-600 px-6">
+                                {centerStat.operatingHours}
+                              </TableCell>
+                              <TableCell className="text-center text-cyan-600 font-semibold px-6">
+                                {centerStat.totalLeadsSent}
+                              </TableCell>
+                              <TableCell className="text-center text-emerald-600 font-semibold px-6">
+                                {centerStat.totalLeadsSentInHours}
+                              </TableCell>
+                              <TableCell className="text-center text-blue-600 font-semibold px-6">
+                                {centerStat.totalUniqueCallsInHours}
+                              </TableCell>
+                              <TableCell className="text-center px-6">
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                    centerStat.callRateInHours >= 50
+                                      ? "bg-green-100 text-green-700 border border-green-300"
+                                      : centerStat.callRateInHours >= 25
+                                      ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
+                                      : "bg-red-100 text-red-700 border border-red-300"
+                                  }`}
+                                >
+                                  {centerStat.callRateInHours.toFixed(1)}%
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-center text-purple-600 font-semibold px-6">
+                                {centerStat.totalLeadsSentAfterHours}
+                              </TableCell>
+                              <TableCell className="text-center text-indigo-600 font-semibold px-6">
+                                {centerStat.totalUniqueCallsAfterHours}
+                              </TableCell>
+                              <TableCell className="text-center px-6">
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                    centerStat.callRateAfterHours >= 50
+                                      ? "bg-green-100 text-green-700 border border-green-300"
+                                      : centerStat.callRateAfterHours >= 25
+                                      ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
+                                      : "bg-red-100 text-red-700 border border-red-300"
+                                  }`}
+                                >
+                                  {centerStat.callRateAfterHours.toFixed(1)}%
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-center text-red-600 font-semibold px-6">
+                                {centerStat.totalCallMissedAfterHours}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-500">
+                  <PhoneCall className="mx-auto h-12 w-12 mb-4 opacity-30" />
+                  <p>No data found in the selected date range</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
-
-        {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card className="bg-gradient-to-br from-white to-cyan-50 border-cyan-200 hover:border-cyan-400 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-200/50 shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                Total Calls
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">
-                      All calls received in the selected date range, including
-                      both in-hours and after-hours calls.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </CardTitle>
-              <div className="p-2 bg-cyan-100 rounded-lg">
-                <PhoneCall className="h-5 w-5 text-cyan-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-slate-900">
-                {stats?.totalCalls || 0}
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                All calls in selected period
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-white to-emerald-50 border-emerald-200 hover:border-emerald-400 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-200/50 shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                In-Hours Leads
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">
-                      Calls received during each call center&apos;s configured
-                      operating hours and days of the week.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </CardTitle>
-              <div className="p-2 bg-emerald-100 rounded-lg">
-                <Phone className="h-5 w-5 text-emerald-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-slate-900">
-                {stats?.totalInHours || 0}
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Calls during business hours
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-white to-purple-50 border-purple-200 hover:border-purple-400 transition-all duration-300 hover:shadow-lg hover:shadow-purple-200/50 shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                After-Hours Leads
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">
-                      Calls received outside each call center&apos;s configured
-                      operating hours or on non-operating days.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </CardTitle>
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <PhoneCall className="h-5 w-5 text-purple-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-slate-900">
-                {stats?.totalAfterHours || 0}
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Calls received outside business hours
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-white to-orange-50 border-orange-200 hover:border-orange-400 transition-all duration-300 hover:shadow-lg hover:shadow-orange-200/50 shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                Callbacks
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">
-                      Calls from the same phone number within 48 hours during
-                      business hours after an initial after-hours call. Rate
-                      shows the percentage of after-hours leads that
-                      successfully called back.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </CardTitle>
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <TrendingUp className="h-5 w-5 text-orange-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-slate-900">
-                {stats?.totalCallbacks || 0}
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                {stats?.totalAfterHours
-                  ? `${stats.callbackRate.toFixed(1)}% callback rate`
-                  : "No after-hours calls yet"}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Table Section */}
-        <Card className="bg-gradient-to-br from-white to-slate-50 border-slate-200 shadow-md hover:shadow-lg transition-shadow duration-300">
-          <CardHeader>
-            <CardTitle className="text-slate-900">
-              Stats by Call Center
-            </CardTitle>
-            <CardDescription className="text-slate-600">
-              Comprehensive breakdown of leads and calls performance
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {stats && stats.callCenterStats.length > 0 ? (
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-slate-200 hover:bg-slate-50">
-                      <TableHead className="text-center text-slate-700 font-semibold min-w-[200px] px-6">
-                        <div className="flex items-center justify-center gap-2">
-                          Call Center
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">
-                                Name of the call center handling the leads and
-                                calls
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
-                        <div className="flex items-center justify-center gap-2">
-                          Operating Hours
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">
-                                Business hours when the call center is actively
-                                staffed and taking calls
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-center text-slate-700 font-semibold min-w-[200px] px-6">
-                        <div className="flex items-center justify-center gap-2">
-                          Total Leads Sent
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">
-                                Total number of leads sent to this call center
-                                (both during and after hours)
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
-                        <div className="flex items-center justify-center gap-2">
-                          Leads Sent (In Hours)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">
-                                Number of leads sent during business operating
-                                hours
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
-                        <div className="flex items-center justify-center gap-2">
-                          Unique Calls (In Hours)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">
-                                Number of unique phone numbers that called
-                                during business hours
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
-                        <div className="flex items-center justify-center gap-2">
-                          Call Rate % (In Hours)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">
-                                Percentage of leads that resulted in actual
-                                calls during business hours
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
-                        <div className="flex items-center justify-center gap-2">
-                          Leads Sent (After Hours)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">
-                                Number of leads sent outside of business
-                                operating hours
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
-                        <div className="flex items-center justify-center gap-2">
-                          Unique Calls (After Hours)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">
-                                Number of unique phone numbers that called after
-                                business hours
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
-                        <div className="flex items-center justify-center gap-2">
-                          Call Rate % (After Hours)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">
-                                Percentage of after-hours leads that resulted in
-                                actual calls
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                      <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
-                        <div className="flex items-center justify-center gap-2">
-                          Calls Missed After Hours
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">
-                                Number of calls that were not answered because
-                                they came in after hours
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {stats.callCenterStats
-                      .filter(
-                        (center) =>
-                          selectedCallCenter === "all" ||
-                          center.callCenter === selectedCallCenter
-                      )
-                      .map((centerStat, index) => {
-                        return (
-                          <TableRow
-                            key={`${centerStat.callCenter}-${index}`}
-                            className="border-slate-200 hover:bg-slate-50"
-                          >
-                            <TableCell className="text-center font-medium text-slate-900 px-6">
-                              {centerStat.callCenter}
-                            </TableCell>
-                            <TableCell className="text-center text-sm text-slate-600 px-6">
-                              {centerStat.operatingHours}
-                            </TableCell>
-                            <TableCell className="text-center text-cyan-600 font-semibold px-6">
-                              {centerStat.totalLeadsSent}
-                            </TableCell>
-                            <TableCell className="text-center text-emerald-600 font-semibold px-6">
-                              {centerStat.totalLeadsSentInHours}
-                            </TableCell>
-                            <TableCell className="text-center text-blue-600 font-semibold px-6">
-                              {centerStat.totalUniqueCallsInHours}
-                            </TableCell>
-                            <TableCell className="text-center px-6">
-                              <span
-                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                  centerStat.callRateInHours >= 50
-                                    ? "bg-green-100 text-green-700 border border-green-300"
-                                    : centerStat.callRateInHours >= 25
-                                    ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
-                                    : "bg-red-100 text-red-700 border border-red-300"
-                                }`}
-                              >
-                                {centerStat.callRateInHours.toFixed(1)}%
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-center text-purple-600 font-semibold px-6">
-                              {centerStat.totalLeadsSentAfterHours}
-                            </TableCell>
-                            <TableCell className="text-center text-indigo-600 font-semibold px-6">
-                              {centerStat.totalUniqueCallsAfterHours}
-                            </TableCell>
-                            <TableCell className="text-center px-6">
-                              <span
-                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                  centerStat.callRateAfterHours >= 50
-                                    ? "bg-green-100 text-green-700 border border-green-300"
-                                    : centerStat.callRateAfterHours >= 25
-                                    ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
-                                    : "bg-red-100 text-red-700 border border-red-300"
-                                }`}
-                              >
-                                {centerStat.callRateAfterHours.toFixed(1)}%
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-center text-red-600 font-semibold px-6">
-                              {centerStat.totalCallMissedAfterHours}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <div className="text-center py-12 text-slate-500">
-                <PhoneCall className="mx-auto h-12 w-12 mb-4 opacity-30" />
-                <p>No data found in the selected date range</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
     </TooltipProvider>
   );

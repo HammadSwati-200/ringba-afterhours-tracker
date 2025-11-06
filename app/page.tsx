@@ -15,9 +15,7 @@ export default function Home() {
       </div>
 
       <div className="relative z-10 p-4 sm:p-6 lg:p-8">
-        <div className="max-w-7xl mx-auto">
-          <Dashboard />
-        </div>
+        <Dashboard />
       </div>
 
       <style jsx>{`

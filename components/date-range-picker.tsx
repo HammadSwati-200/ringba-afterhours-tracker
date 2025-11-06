@@ -134,7 +134,10 @@ export function DateRangePicker({
               selectsRange
               inline
               monthsShown={2}
-              calendarClassName="custom-datepicker"
+              calendarClassName={cn(
+                "custom-datepicker",
+                !startDate && !endDate && "no-selection"
+              )}
             />
           </div>
           <div className="flex gap-2 p-3 border-t border-slate-200">
