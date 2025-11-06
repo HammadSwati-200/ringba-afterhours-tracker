@@ -127,6 +127,24 @@ body {
 
 .react-datepicker__day--outside-month {
   color: #94a3b8 !important;
+  background-color: transparent !important;
+}
+
+/* Remove selection styling from outside-month dates - highest priority */
+.react-datepicker__day--outside-month.react-datepicker__day--selected,
+.react-datepicker__day--outside-month.react-datepicker__day--in-range,
+.react-datepicker__day--outside-month.react-datepicker__day--range-start,
+.react-datepicker__day--outside-month.react-datepicker__day--range-end,
+.react-datepicker__day--outside-month.react-datepicker__day--keyboard-selected,
+.react-datepicker__day--outside-month.react-datepicker__day--in-selecting-range {
+  background-color: transparent !important;
+  color: #94a3b8 !important;
+  font-weight: 400 !important;
+}
+
+.react-datepicker__day--outside-month:hover {
+  background-color: transparent !important;
+  color: #94a3b8 !important;
 }
 
 .react-datepicker__navigation {
