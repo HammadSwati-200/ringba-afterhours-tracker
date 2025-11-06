@@ -184,11 +184,15 @@ export function Dashboard() {
       const startDate = dateRange.from;
       const endDate = dateRange.to;
 
+      // Adjust end date to include the entire day (set to 23:59:59)
+      const adjustedEndDate = new Date(endDate);
+      adjustedEndDate.setHours(23, 59, 59, 999);
+
       console.log(
         "Date Range:",
         startDate.toISOString(),
         "to",
-        endDate.toISOString()
+        adjustedEndDate.toISOString()
       );
       console.log("Current Date:", new Date().toISOString());
       console.log("Fetching data from:", startDate.toISOString());
@@ -205,7 +209,7 @@ export function Dashboard() {
           .from("calls")
           .select("*")
           .gte("created_at", startDate.toISOString())
-          .lte("created_at", endDate.toISOString())
+          .lte("created_at", adjustedEndDate.toISOString())
           .order("created_at", { ascending: false })
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -235,9 +239,9 @@ export function Dashboard() {
         const { data: irevLeadsPage, error: irevError } = await supabase
           .from("irev_leads")
           .select("*")
-          .gte("created_at", startDate.toISOString())
-          .lte("created_at", endDate.toISOString())
-          .order("created_at", { ascending: false })
+          .gte("timestampz", startDate.toISOString())
+          .lte("timestampz", adjustedEndDate.toISOString())
+          .order("timestampz", { ascending: false })
           .range(irevPage * pageSize, (irevPage + 1) * pageSize - 1);
 
         if (irevError) {
