@@ -193,31 +193,68 @@ export function Dashboard() {
       console.log("Current Date:", new Date().toISOString());
       console.log("Fetching data from:", startDate.toISOString());
 
-      // Fetch calls from Ringba
-      const { data: calls, error: fetchError } = await supabase
-        .from("calls")
-        .select("*")
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString())
-        .order("created_at", { ascending: false });
+      // Fetch calls from Ringba - fetch all records
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let allCalls: any[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
 
-      if (fetchError) {
-        console.error("Supabase error:", fetchError);
-        throw new Error(`Database error: ${fetchError.message}`);
+      while (hasMore) {
+        const { data: callsPage, error: fetchError } = await supabase
+          .from("calls")
+          .select("*")
+          .gte("created_at", startDate.toISOString())
+          .lte("created_at", endDate.toISOString())
+          .order("created_at", { ascending: false })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (fetchError) {
+          console.error("Supabase error:", fetchError);
+          throw new Error(`Database error: ${fetchError.message}`);
+        }
+
+        if (callsPage && callsPage.length > 0) {
+          allCalls = [...allCalls, ...callsPage];
+          hasMore = callsPage.length === pageSize;
+          page++;
+        } else {
+          hasMore = false;
+        }
       }
 
-      // Fetch irev leads data
-      const { data: irevLeads, error: irevError } = await supabase
-        .from("irev_leads")
-        .select("*")
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString())
-        .order("created_at", { ascending: false });
+      const calls = allCalls;
 
-      if (irevError) {
-        console.error("Supabase irev error:", irevError);
-        throw new Error(`Database error: ${irevError.message}`);
+      // Fetch irev leads data - fetch all records
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let allIrevLeads: any[] = [];
+      let irevPage = 0;
+      let hasMoreIrev = true;
+
+      while (hasMoreIrev) {
+        const { data: irevLeadsPage, error: irevError } = await supabase
+          .from("irev_leads")
+          .select("*")
+          .gte("created_at", startDate.toISOString())
+          .lte("created_at", endDate.toISOString())
+          .order("created_at", { ascending: false })
+          .range(irevPage * pageSize, (irevPage + 1) * pageSize - 1);
+
+        if (irevError) {
+          console.error("Supabase irev error:", irevError);
+          throw new Error(`Database error: ${irevError.message}`);
+        }
+
+        if (irevLeadsPage && irevLeadsPage.length > 0) {
+          allIrevLeads = [...allIrevLeads, ...irevLeadsPage];
+          hasMoreIrev = irevLeadsPage.length === pageSize;
+          irevPage++;
+        } else {
+          hasMoreIrev = false;
+        }
       }
+
+      const irevLeads = allIrevLeads;
 
       console.log("Fetched calls:", calls?.length || 0);
       console.log("Fetched irev leads:", irevLeads?.length || 0);
