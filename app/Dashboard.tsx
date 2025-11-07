@@ -8,6 +8,39 @@ import {
   getCallCenterName,
   callCenterHours,
 } from "@/lib/call-center-hours";
+
+// DID to Call Center mapping with operating hours
+const DID_TO_CALL_CENTER: { [key: string]: { cc: string; hasHours: boolean } } =
+  {
+    "18334411529": { cc: "CC1", hasHours: true },
+    "18334362190": { cc: "CC2", hasHours: true },
+    "18334310623": { cc: "CC3", hasHours: false },
+    "18334410032": { cc: "CC4", hasHours: false },
+    "18334310301": { cc: "CC5", hasHours: false },
+    "18334320783": { cc: "CC6", hasHours: false },
+    "18334370501": { cc: "CC7", hasHours: true },
+    "18334411630": { cc: "CC8", hasHours: false },
+    "18334412492": { cc: "CC9", hasHours: true },
+    "18334412564": { cc: "CC10", hasHours: true },
+    "18334411593": { cc: "CC12", hasHours: true },
+    "18334411506": { cc: "CC13", hasHours: true },
+    "18334412568": { cc: "CC14", hasHours: true },
+    "18334362221": { cc: "CC14B", hasHours: true },
+    "18334950158": { cc: "CC14C", hasHours: true },
+    "18557020153": { cc: "CC14D", hasHours: true },
+    "18339913927": { cc: "CC14E", hasHours: true },
+    "18334410027": { cc: "CC15", hasHours: true },
+    "18334412573": { cc: "CC16", hasHours: true },
+    "18334300436": { cc: "CC17", hasHours: true },
+    "18339951463": { cc: "CC19", hasHours: true },
+    "18339923833": { cc: "CC20", hasHours: true },
+    "18339923731": { cc: "CC21", hasHours: true },
+    "18337018811": { cc: "CC22", hasHours: true },
+    "18337731567": { cc: "CC23A", hasHours: true },
+    "18338360164": { cc: "CC23B", hasHours: true },
+    "18339403006": { cc: "CC24", hasHours: true },
+    "18337564307": { cc: "CC25", hasHours: true },
+  };
 import {
   Card,
   CardContent,
@@ -302,17 +335,38 @@ export function Dashboard() {
         return;
       }
 
-      // Separate calls into in-hours and after-hours based on publisher_name
-      // If publisher_name does NOT contain "SMS" -> In Hours call
-      // If publisher_name contains "SMS" -> After Hours call
-      const inHoursCalls = calls.filter((call) => {
-        return !call.publisher_name?.includes("SMS");
-      });
+      // Separate calls into in-hours and after-hours using both CC_Number and publisher_name
+      // Logic:
+      // 1. If publisher_name includes "SMS" -> After Hours (always)
+      // 2. If CC_Number matches any DID in our list -> After Hours (DID calls are after hours)
+      // 3. Otherwise -> In Hours
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const isInHoursCall = (call: any): boolean => {
+        // SMS calls are always after hours
+        if (call.publisher_name?.includes("SMS")) {
+          return false;
+        }
 
-      const afterHoursCalls = calls.filter((call) => {
-        return call.publisher_name?.includes("SMS");
-      });
+        // Extract phone number from CC_Number (remove +1 prefix if exists)
+        const ccNumber = call.CC_Number?.replace(/^\+1/, "");
+        if (!ccNumber) {
+          // No CC_Number, check publisher_name - if no SMS, it's in hours
+          return !call.publisher_name?.includes("SMS");
+        }
 
+        // Check if this CC_Number matches any DID in our mapping
+        const didInfo = DID_TO_CALL_CENTER[ccNumber];
+        if (didInfo) {
+          // CC_Number matches a DID in our list -> After Hours (DID = after hours)
+          return false;
+        }
+
+        // CC_Number doesn't match any DID and no SMS -> In Hours
+        return true;
+      };
+
+      const inHoursCalls = calls.filter(isInHoursCall);
+      const afterHoursCalls = calls.filter((call) => !isInHoursCall(call));
       console.log("Total calls:", calls.length);
       console.log("In-hours calls:", inHoursCalls.length);
       console.log("After-hours calls:", afterHoursCalls.length);
@@ -333,7 +387,7 @@ export function Dashboard() {
             call.caller_phone === afterHoursCall.caller_phone &&
             callDate > afterHoursDate &&
             callDate <= maxCallbackDate &&
-            !call.publisher_name?.includes("SMS") && // In-hours callback (no SMS)
+            isInHoursCall(call) && // In-hours callback using new logic
             call.call_center === afterHoursCall.call_center
           );
         });
