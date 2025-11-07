@@ -500,9 +500,12 @@ export function Dashboard() {
         };
       });
 
-      // Convert to array and sort by total leads sent
-      const callCenterStats = Object.values(callCenterStatsMap).sort(
-        (a, b) => b.totalLeadsSent - a.totalLeadsSent
+      // Convert to array and sort with natural sorting (handles numbers correctly)
+      const callCenterStats = Object.values(callCenterStatsMap).sort((a, b) =>
+        a.callCenter.localeCompare(b.callCenter, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        })
       );
 
       setStats({
