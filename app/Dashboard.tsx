@@ -500,13 +500,38 @@ export function Dashboard() {
         };
       });
 
-      // Convert to array and sort with natural sorting (handles numbers correctly)
-      const callCenterStats = Object.values(callCenterStatsMap).sort((a, b) =>
-        a.callCenter.localeCompare(b.callCenter, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        })
-      );
+      // Convert to array and sort with custom natural sorting
+      const callCenterStats = Object.values(callCenterStatsMap).sort((a, b) => {
+        // Extract the base name and number for proper sorting
+        const extractParts = (name: string) => {
+          // Remove underscores and extract letters and numbers
+          const match = name.match(/^([A-Za-z_]+?)(\d+)([A-Za-z]*)$/);
+          if (match) {
+            return {
+              prefix: match[1].replace(/_/g, ""),
+              number: parseInt(match[2]),
+              suffix: match[3],
+            };
+          }
+          return { prefix: name, number: 0, suffix: "" };
+        };
+
+        const partsA = extractParts(a.callCenter);
+        const partsB = extractParts(b.callCenter);
+
+        // Compare prefix first
+        if (partsA.prefix !== partsB.prefix) {
+          return partsA.prefix.localeCompare(partsB.prefix);
+        }
+
+        // Then compare numbers
+        if (partsA.number !== partsB.number) {
+          return partsA.number - partsB.number;
+        }
+
+        // Finally compare suffix (A, B, C, etc.)
+        return partsA.suffix.localeCompare(partsB.suffix);
+      });
 
       setStats({
         totalCalls: calls.length,
