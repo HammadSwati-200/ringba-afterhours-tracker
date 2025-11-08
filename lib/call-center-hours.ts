@@ -106,9 +106,17 @@ export const callCenterHours: CallCenterHours[] = [
     daysOfWeek: [1, 2, 3, 4, 5], // Mon-Fri
   },
   {
-    id: "CC14",
-    name: "CC14A",
+    id: "CC_14",
+    name: "CC_14",
     did: "18334412568",
+    startHour: 8,
+    endHour: 18, // 6pm
+    timezone: "PST",
+    daysOfWeek: [1, 2, 3, 4, 5], // Mon-Fri
+  },
+  {
+    id: "CC14A",
+    name: "CC14A",
     startHour: 8,
     endHour: 18, // 6pm
     timezone: "PST",

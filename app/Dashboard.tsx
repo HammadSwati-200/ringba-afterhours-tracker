@@ -24,7 +24,7 @@ const DID_TO_CALL_CENTER: { [key: string]: { cc: string; hasHours: boolean } } =
     "18334412564": { cc: "CC10", hasHours: true },
     "18334411593": { cc: "CC12", hasHours: true },
     "18334411506": { cc: "CC13", hasHours: true },
-    "18334412568": { cc: "CC14", hasHours: true },
+    "18334412568": { cc: "CC_14", hasHours: true },
     "18334362221": { cc: "CC14B", hasHours: true },
     "18334950158": { cc: "CC14C", hasHours: true },
     "18557020153": { cc: "CC14D", hasHours: true },
@@ -460,14 +460,9 @@ export function Dashboard() {
       allCallCenters.forEach((centerIdRaw) => {
         const centerId = centerIdRaw;
 
-        // Normalize ID for config lookup
-        const normalizedId = centerId.replace(/_/g, "");
+        // Find exact config match - no normalization to avoid CC_14 matching CC14A
         const config = callCenterHours.find(
-          (cc) =>
-            cc.id.replace(/_/g, "") === normalizedId ||
-            cc.name.replace(/_/g, "") === normalizedId ||
-            cc.id === centerId ||
-            cc.name === centerId
+          (cc) => cc.id === centerId || cc.name === centerId
         );
 
         const hasHours =
