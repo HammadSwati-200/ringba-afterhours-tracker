@@ -460,9 +460,14 @@ export function Dashboard() {
       allCallCenters.forEach((centerIdRaw) => {
         const centerId = centerIdRaw;
 
-        // Find exact config match - no normalization to avoid CC_14 matching CC14A
+        // Normalize only for config lookup (keep display/grouping by raw ID)
+        const normalizedId = centerId.replace(/_/g, "");
         const config = callCenterHours.find(
-          (cc) => cc.id === centerId || cc.name === centerId
+          (cc) =>
+            cc.id.replace(/_/g, "") === normalizedId ||
+            cc.name.replace(/_/g, "") === normalizedId ||
+            cc.id === centerId ||
+            cc.name === centerId
         );
 
         const hasHours =
@@ -498,35 +503,36 @@ export function Dashboard() {
           (call) => call.call_center === centerId
         );
 
-        // Total unique calls in hours (Ringba calls without "SMS" in publisher_name, unique by phone)
-        const callsInHours = centerCalls.filter((call) => {
-          return !call.publisher_name?.includes("SMS");
-        });
+        // Total unique calls in hours (use unified isInHoursCall classification)
+        const callsInHours = centerCalls.filter((call) => isInHoursCall(call));
         const uniquePhoneNumbersInHours = new Set(
           callsInHours.map((call) => call.caller_phone)
         );
         const totalUniqueCallsInHours = uniquePhoneNumbersInHours.size;
 
-        // Total unique calls after hours (Ringba calls with "SMS" in publisher_name, unique by phone)
-        const callsAfterHours = centerCalls.filter((call) => {
-          return call.publisher_name?.includes("SMS");
-        });
+        // Total unique calls after hours (use unified isInHoursCall classification)
+        const callsAfterHours = centerCalls.filter(
+          (call) => !isInHoursCall(call)
+        );
         const uniquePhoneNumbersAfterHours = new Set(
           callsAfterHours.map((call) => call.caller_phone)
         );
         const totalUniqueCallsAfterHours = uniquePhoneNumbersAfterHours.size;
 
         // Call rate in hours (unique calls / leads sent in hours)
-        const callRateInHours =
+        let callRateInHours =
           totalLeadsSentInHours > 0
             ? (totalUniqueCallsInHours / totalLeadsSentInHours) * 100
             : 0;
+        // Cap to 100% to avoid confusion when calls exceed leads
+        callRateInHours = Math.min(callRateInHours, 100);
 
         // Call rate after hours (unique calls / leads sent after hours)
-        const callRateAfterHours =
+        let callRateAfterHours =
           totalLeadsSentAfterHours > 0
             ? (totalUniqueCallsAfterHours / totalLeadsSentAfterHours) * 100
             : 0;
+        callRateAfterHours = Math.min(callRateAfterHours, 100);
 
         // Total calls missed after hours
         // This is leads sent after hours minus unique calls made after hours
