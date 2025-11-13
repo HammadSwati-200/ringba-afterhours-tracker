@@ -9,8 +9,31 @@ import {
   callCenterHours,
 } from "@/lib/call-center-hours";
 
-// DID to Call Center mapping with operating hours
-const DID_TO_CALL_CENTER: { [key: string]: { cc: string; hasHours: boolean } } =
+// Types for strict matching
+interface CallRow {
+  call_center: string;
+  created_at?: string;
+  call_date?: string;
+  caller_phone?: string;
+  click_id?: string;
+  clickId?: string;
+  CC_Number?: string;
+  publisher_name?: string;
+}
+
+interface LeadRow {
+  utm_source?: string;
+  timestampz?: string;
+  created_at?: string;
+  cid?: string;
+  click_id?: string;
+  clickId?: string;
+  phone_number_norm?: string;
+  phone_number?: string;
+}
+// DID to Call Center mapping used for after-hours override
+// If a call's CC_Number (stripped of +1) matches any DID here, treat that call as after-hours
+const DID_TO_CALL_CENTER: { [did: string]: { cc: string; hasHours: boolean } } =
   {
     "18334411529": { cc: "CC1", hasHours: true },
     "18334362190": { cc: "CC2", hasHours: true },
@@ -335,70 +358,119 @@ export function Dashboard() {
         return;
       }
 
-      // Separate calls into in-hours and after-hours using both CC_Number and publisher_name
-      // Logic:
-      // 1. If publisher_name includes "SMS" -> After Hours (always)
-      // 2. If CC_Number matches any DID in our list -> After Hours (DID calls are after hours)
-      // 3. Otherwise -> In Hours
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const isInHoursCall = (call: any): boolean => {
-        // SMS calls are always after hours
-        if (call.publisher_name?.includes("SMS")) {
-          return false;
-        }
+      // Helper: prefer click_id for matching with irev cid; fallback to phone
+      const getCallKey = (c: CallRow): string | null =>
+        c?.click_id || c?.clickId || c?.caller_phone || null;
+      const getLeadKey = (l: LeadRow): string | null =>
+        l?.cid ||
+        l?.click_id ||
+        l?.clickId ||
+        l?.phone_number_norm ||
+        l?.phone_number ||
+        null;
 
-        // Extract phone number from CC_Number (remove +1 prefix if exists)
-        const ccNumber = call.CC_Number?.replace(/^\+1/, "");
-        if (!ccNumber) {
-          // No CC_Number, check publisher_name - if no SMS, it's in hours
-          return !call.publisher_name?.includes("SMS");
-        }
+      // NEW LOGIC per client feedback:
+      // In-Hours Calls: All calls during business hours that are NOT SMS
+      // After-Hours Calls: SMS calls during next-day business hours after an after-hours period
 
-        // Check if this CC_Number matches any DID in our mapping
-        const didInfo = DID_TO_CALL_CENTER[ccNumber];
-        if (didInfo) {
-          // CC_Number matches a DID in our list -> After Hours (DID = after hours)
-          return false;
-        }
+      const callKeysByCenterInHours: Record<string, Set<string>> = {};
+      const callKeysByCenterAfterHours: Record<string, Set<string>> = {};
+      const callsByCenterKeyDates: Record<string, Map<string, Date[]>> = {};
 
-        // CC_Number doesn't match any DID and no SMS -> In Hours
-        return true;
-      };
+      // Store all calls with metadata for later processing
+      interface CallMetadata {
+        key: string;
+        date: Date;
+        centerId: string;
+        isSMS: boolean;
+        isInHours: boolean;
+      }
+      const allCallsMetadata: CallMetadata[] = [];
 
-      const inHoursCalls = calls.filter(isInHoursCall);
-      const afterHoursCalls = calls.filter((call) => !isInHoursCall(call));
-      console.log("Total calls:", calls.length);
-      console.log("In-hours calls:", inHoursCalls.length);
-      console.log("After-hours calls:", afterHoursCalls.length);
-
-      let callbackCount = 0;
-      const callbacksByCenter: { [key: string]: number } = {};
-
-      afterHoursCalls.forEach((afterHoursCall) => {
-        const afterHoursDate = new Date(
-          afterHoursCall.created_at || afterHoursCall.call_date
+      (calls as CallRow[]).forEach((call) => {
+        const centerIdRaw: string = call.call_center;
+        const centerId: string = centerIdRaw?.replace(/_/g, "");
+        const key = getCallKey(call);
+        if (!centerId || !key) return;
+        const callDate = new Date(
+          (call.created_at ?? call.call_date) as string
         );
-        const maxCallbackDate = new Date(afterHoursDate);
-        maxCallbackDate.setHours(maxCallbackDate.getHours() + 48);
 
-        const hasCallback = calls.some((call) => {
-          const callDate = new Date(call.created_at || call.call_date);
-          return (
-            call.caller_phone === afterHoursCall.caller_phone &&
-            callDate > afterHoursDate &&
-            callDate <= maxCallbackDate &&
-            isInHoursCall(call) && // In-hours callback using new logic
-            call.call_center === afterHoursCall.call_center
-          );
-        });
+        // Determine if this is an SMS call (publisher_name contains "SMS" OR CC_Number is SMS DID)
+        const isSMS = !!(
+          call.publisher_name?.includes("SMS") ||
+          (call.CC_Number && DID_TO_CALL_CENTER[call.CC_Number.replace(/^\+1/, "")])
+        );
 
-        if (hasCallback) {
-          callbackCount++;
-          const centerId = afterHoursCall.call_center;
-          callbacksByCenter[centerId] = (callbacksByCenter[centerId] || 0) + 1;
+        // Determine if call timestamp is during business hours
+        const isInHours = !isAfterHours(callDate, centerId);
+
+        // Initialize data structures
+        if (!callKeysByCenterInHours[centerId]) {
+          callKeysByCenterInHours[centerId] = new Set();
+          callKeysByCenterAfterHours[centerId] = new Set();
+          callsByCenterKeyDates[centerId] = new Map();
         }
+
+        // IN-HOURS CALLS: Calls during business hours that are NOT SMS
+        if (isInHours && !isSMS) {
+          callKeysByCenterInHours[centerId]!.add(key);
+        }
+
+        // Store all call metadata for after-hours processing
+        allCallsMetadata.push({ key, date: callDate, centerId, isSMS, isInHours });
+
+        // Store all calls by center for date mapping
+        const map = callsByCenterKeyDates[centerId]!;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(callDate);
       });
 
+      // Helper: compute next-day in-hours window for a given date and center
+      const getNextDayInHoursWindow = (
+        date: Date,
+        centerId: string
+      ): { start: Date; end: Date } | null => {
+        const normalizedId = centerId.replace(/_/g, "");
+        const cfg = callCenterHours.find(
+          (cc) =>
+            cc.id.replace(/_/g, "") === normalizedId ||
+            cc.name.replace(/_/g, "") === normalizedId ||
+            cc.id === centerId ||
+            cc.name === centerId
+        );
+        if (
+          !cfg ||
+          cfg.startHour === undefined ||
+          cfg.endHour === undefined ||
+          !cfg.daysOfWeek
+        )
+          return null;
+        const next = new Date(date);
+        next.setDate(next.getDate() + 1);
+        next.setHours(0, 0, 0, 0);
+        // build start/end on next day (naive local time)
+        const start = new Date(next);
+        start.setHours(
+          Math.floor(cfg.startHour),
+          Math.round((cfg.startHour % 1) * 60),
+          0,
+          0
+        );
+        const end = new Date(next);
+        end.setHours(
+          Math.floor(cfg.endHour),
+          Math.round((cfg.endHour % 1) * 60),
+          59,
+          999
+        );
+        // If next day not in operating days, return null
+        const day = start.getDay();
+        if (!cfg.daysOfWeek.includes(day)) return null;
+        return { start, end };
+      };
+
+      // Build per-center stats based on irev leads and matched Ringba calls via cid/click_id
       const byCallCenter: {
         [key: string]: {
           total: number;
@@ -409,9 +481,37 @@ export function Dashboard() {
         };
       } = {};
 
-      // Count all calls by center
-      calls.forEach((call) => {
-        const centerId = call.call_center;
+      // Aggregate total leads by hours for cards
+      let totalLeadsInHoursAll = 0;
+      let totalLeadsAfterHoursAll = 0;
+
+      // Compute callback (after-hours recovery) as: after-hours lead → next-day in-hours call
+      let callbackCount = 0;
+      const callbacksByCenter: { [key: string]: number } = {};
+
+      // Group irev leads by center (utm_source)
+      const leadsByCenter: Record<string, LeadRow[]> = {};
+      ((irevLeads || []) as LeadRow[]).forEach((lead) => {
+        const centerId = (lead.utm_source || "").replace(/_/g, "");
+        if (!centerId) return;
+        if (!leadsByCenter[centerId]) leadsByCenter[centerId] = [];
+        leadsByCenter[centerId].push(lead);
+      });
+
+      Object.keys(leadsByCenter).forEach((centerId) => {
+        const leads = leadsByCenter[centerId];
+        const leadsInHours = leads.filter((l) => {
+          const d = new Date((l.timestampz ?? l.created_at) as string);
+          return !isAfterHours(d, centerId);
+        });
+        const leadsAfterHours = leads.filter((l) => {
+          const d = new Date((l.timestampz ?? l.created_at) as string);
+          return isAfterHours(d, centerId);
+        });
+
+        totalLeadsInHoursAll += leadsInHours.length;
+        totalLeadsAfterHoursAll += leadsAfterHours.length;
+
         if (!byCallCenter[centerId]) {
           byCallCenter[centerId] = {
             total: 0,
@@ -421,44 +521,68 @@ export function Dashboard() {
             rate: 0,
           };
         }
-        byCallCenter[centerId].total++;
+        byCallCenter[centerId].total = leads.length;
+        byCallCenter[centerId].inHours = leadsInHours.length;
+        byCallCenter[centerId].afterHours = leadsAfterHours.length;
 
-        // Use publisher_name to determine in-hours vs after-hours
-        if (!call.publisher_name?.includes("SMS")) {
-          byCallCenter[centerId].inHours++;
-        } else {
-          byCallCenter[centerId].afterHours++;
+        // NEW LOGIC: After-hours calls = SMS calls during next-day in-hours
+        // For each after-hours lead, check if there's an SMS call during the next business day
+        const afterHoursCallKeys = new Set<string>();
+        leadsAfterHours.forEach((l) => {
+          const key = getLeadKey(l);
+          if (!key) return;
+
+          const leadDate = new Date((l.timestampz ?? l.created_at) as string);
+          const nextDayWindow = getNextDayInHoursWindow(leadDate, centerId);
+          if (!nextDayWindow) return;
+
+          // Find SMS calls for this center during next-day in-hours window
+          const smsCallsInWindow = allCallsMetadata.filter(
+            (call) =>
+              call.centerId === centerId &&
+              call.isSMS &&
+              call.key === key &&
+              call.date >= nextDayWindow.start &&
+              call.date <= nextDayWindow.end
+          );
+
+          if (smsCallsInWindow.length > 0) {
+            afterHoursCallKeys.add(key);
+          }
+        });
+
+        // Store after-hours call keys for this center
+        callKeysByCenterAfterHours[centerId] = afterHoursCallKeys;
+
+        // Callbacks = Same as after-hours calls per client feedback
+        // "Recovery is the same as after call"
+        if (afterHoursCallKeys.size > 0) {
+          callbacksByCenter[centerId] = afterHoursCallKeys.size;
+          callbackCount += afterHoursCallKeys.size;
         }
       });
 
-      Object.keys(callbacksByCenter).forEach((centerId) => {
-        if (byCallCenter[centerId]) {
-          byCallCenter[centerId].callbacks = callbacksByCenter[centerId];
-          byCallCenter[centerId].rate =
-            (callbacksByCenter[centerId] / byCallCenter[centerId].afterHours) *
-            100;
-        }
-      });
-
-      // Build call center stats combining irev_leads and calls data
+      // Build call center stats combining irev_leads and calls data (joined by cid/click_id)
       const callCenterStatsMap: { [key: string]: CallCenterStats } = {};
 
       // Get all unique call centers from both sources
       const allCallCenters = new Set<string>();
 
-      // Add from calls (call_center field)
+      // Add from calls (call_center field) normalized (underscores removed)
       calls.forEach((call) => {
-        if (call.call_center) allCallCenters.add(call.call_center);
+        if (call.call_center)
+          allCallCenters.add(String(call.call_center).replace(/_/g, ""));
       });
 
-      // Add from irev_leads (utm_source field)
+      // Add from irev_leads (utm_source field) normalized
       (irevLeads || []).forEach((lead) => {
-        if (lead.utm_source) allCallCenters.add(lead.utm_source);
+        if (lead.utm_source)
+          allCallCenters.add(String(lead.utm_source).replace(/_/g, ""));
       });
 
       // Process each call center
       allCallCenters.forEach((centerIdRaw) => {
-        const centerId = centerIdRaw;
+        const centerId = centerIdRaw; // already normalized
 
         // Normalize only for config lookup (keep display/grouping by raw ID)
         const normalizedId = centerId.replace(/_/g, "");
@@ -479,53 +603,42 @@ export function Dashboard() {
           ? formatOperatingHours(centerId)
           : "No hours configured";
 
-        // Total leads sent from irev_leads (by utm_source)
-        const totalLeadsSent = (irevLeads || []).filter(
+        // Total leads (all / in-hours / after-hours)
+        const centerLeads = (irevLeads || []).filter(
           (lead) => lead.utm_source === centerId
-        ).length;
-
-        // Total leads sent in hours (irev_leads during operating hours based on timestamp)
-        const totalLeadsSentInHours = (irevLeads || []).filter((lead) => {
-          if (lead.utm_source !== centerId) return false;
-          const leadDate = new Date(lead.timestampz || lead.created_at);
-          return !isAfterHours(leadDate, centerId);
-        }).length;
-
-        // Total leads sent after hours (irev_leads outside operating hours based on timestamp)
-        const totalLeadsSentAfterHours = (irevLeads || []).filter((lead) => {
-          if (lead.utm_source !== centerId) return false;
-          const leadDate = new Date(lead.timestampz || lead.created_at);
-          return isAfterHours(leadDate, centerId);
-        }).length;
-
-        // Get all calls for this center
-        const centerCalls = calls.filter(
-          (call) => call.call_center === centerId
         );
+        const totalLeadsSent = centerLeads.length;
+        const centerLeadsInHours = centerLeads.filter((lead) => {
+          const d = new Date(lead.timestampz || lead.created_at);
+          return !isAfterHours(d, centerId);
+        });
+        const centerLeadsAfterHours = centerLeads.filter((lead) => {
+          const d = new Date(lead.timestampz || lead.created_at);
+          return isAfterHours(d, centerId);
+        });
+        const totalLeadsSentInHours = centerLeadsInHours.length;
+        const totalLeadsSentAfterHours = centerLeadsAfterHours.length;
 
-        // Total unique calls in hours (use unified isInHoursCall classification)
-        const callsInHours = centerCalls.filter((call) => isInHoursCall(call));
-        const uniquePhoneNumbersInHours = new Set(
-          callsInHours.map((call) => call.caller_phone)
-        );
-        const totalUniqueCallsInHours = uniquePhoneNumbersInHours.size;
+        // NEW LOGIC per client feedback:
+        // In-Hours Calls: Count ALL non-SMS calls during in-hours (not just matched to leads)
+        // After-Hours Calls: Count SMS calls during next-day in-hours (already populated)
+        const callKeysIn =
+          callKeysByCenterInHours[centerId] || new Set<string>();
+        const callKeysAfter =
+          callKeysByCenterAfterHours[centerId] || new Set<string>();
 
-        // Total unique calls after hours (use unified isInHoursCall classification)
-        const callsAfterHours = centerCalls.filter(
-          (call) => !isInHoursCall(call)
-        );
-        const uniquePhoneNumbersAfterHours = new Set(
-          callsAfterHours.map((call) => call.caller_phone)
-        );
-        const totalUniqueCallsAfterHours = uniquePhoneNumbersAfterHours.size;
+        // Total Unique Calls In-Hours = size of all non-SMS call keys during in-hours
+        const totalUniqueCallsInHours = callKeysIn.size;
+
+        // Total Unique Calls After-Hours = size of SMS call keys during next-day in-hours
+        const totalUniqueCallsAfterHours = callKeysAfter.size;
 
         // Call rate in hours (unique calls / leads sent in hours)
-        let callRateInHours =
+        // Note: Not capped at 100% per client request - can exceed if more calls than leads
+        const callRateInHours =
           totalLeadsSentInHours > 0
             ? (totalUniqueCallsInHours / totalLeadsSentInHours) * 100
             : 0;
-        // Cap to 100% to avoid confusion when calls exceed leads
-        callRateInHours = Math.min(callRateInHours, 100);
 
         // Call rate after hours (unique calls / leads sent after hours)
         let callRateAfterHours =
@@ -590,12 +703,12 @@ export function Dashboard() {
 
       setStats({
         totalCalls: calls.length,
-        totalInHours: inHoursCalls.length,
-        totalAfterHours: afterHoursCalls.length,
+        totalInHours: totalLeadsInHoursAll,
+        totalAfterHours: totalLeadsAfterHoursAll,
         totalCallbacks: callbackCount,
         callbackRate:
-          afterHoursCalls.length > 0
-            ? (callbackCount / afterHoursCalls.length) * 100
+          totalLeadsAfterHoursAll > 0
+            ? (callbackCount / totalLeadsAfterHoursAll) * 100
             : 0,
         byCallCenter,
         callCenterStats,
@@ -635,18 +748,18 @@ export function Dashboard() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } else if (format === "csv") {
-      // CSV headers
+      // CSV headers (match UI wording in single-line form)
       const headers = [
         "Call Center",
         "Operating Hours",
-        "Total Leads Sent",
-        "Leads Sent (In Hours)",
-        "Unique Calls (In Hours)",
-        "Call Rate % (In Hours)",
-        "Leads Sent (After Hours)",
-        "Unique Calls (After Hours)",
-        "Call Rate % (After Hours)",
-        "Calls Missed After Hours",
+        "Total Leads Sent (All)",
+        "Total Leads Sent (In-Hours)",
+        "Total Unique Calls (In-Hours)",
+        "Call Rate % (In-Hours)",
+        "Total Leads Sent (After-Hours)",
+        "Total Unique Calls (After-Hours)",
+        "Call Rate % (After-Hours)",
+        "Total Calls Missed (After-Hours)",
       ];
 
       // CSV rows
@@ -699,7 +812,7 @@ export function Dashboard() {
           <CardContent>
             <Button
               onClick={() => loadStats()}
-              className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white shadow-md"
+              className="w-full bg-linear-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white shadow-md"
             >
               <RefreshCw className="mr-2 w-4 h-4" />
               Try Again
@@ -728,7 +841,7 @@ export function Dashboard() {
           {/* Header */}
           <div className="flex items-start justify-between flex-wrap gap-4">
             <div>
-              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
+              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight bg-linear-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
                 Ringba After-Hours Tracker
               </h1>
               <p className="text-slate-600 mt-2 text-lg">
@@ -773,7 +886,7 @@ export function Dashboard() {
                     value={center.callCenter}
                     className="font-medium"
                   >
-                    {center.callCenter}
+                    {center.callCenter.replace(/_/g, "")}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -833,7 +946,7 @@ export function Dashboard() {
 
           {/* Stats Cards */}
           <div className="grid gap-4 md:grid-cols-4">
-            <Card className="bg-gradient-to-br from-white to-cyan-50 border-cyan-200 hover:border-cyan-400 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-200/50 shadow-md">
+            <Card className="bg-linear-to-br from-white to-cyan-50 border-cyan-200 hover:border-cyan-400 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-200/50 shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
                   Total Calls
@@ -863,7 +976,7 @@ export function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-white to-emerald-50 border-emerald-200 hover:border-emerald-400 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-200/50 shadow-md">
+            <Card className="bg-linear-to-br from-white to-emerald-50 border-emerald-200 hover:border-emerald-400 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-200/50 shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
                   In-Hours Leads
@@ -893,7 +1006,7 @@ export function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-white to-purple-50 border-purple-200 hover:border-purple-400 transition-all duration-300 hover:shadow-lg hover:shadow-purple-200/50 shadow-md">
+            <Card className="bg-linear-to-br from-white to-purple-50 border-purple-200 hover:border-purple-400 transition-all duration-300 hover:shadow-lg hover:shadow-purple-200/50 shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
                   After-Hours Leads
@@ -923,7 +1036,7 @@ export function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-white to-orange-50 border-orange-200 hover:border-orange-400 transition-all duration-300 hover:shadow-lg hover:shadow-orange-200/50 shadow-md">
+            <Card className="bg-linear-to-br from-white to-orange-50 border-orange-200 hover:border-orange-400 transition-all duration-300 hover:shadow-lg hover:shadow-orange-200/50 shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
                   Callbacks
@@ -959,7 +1072,7 @@ export function Dashboard() {
           </div>
 
           {/* Table Section */}
-          <Card className="bg-gradient-to-br from-white to-slate-50 border-slate-200 shadow-md hover:shadow-lg transition-shadow duration-300">
+          <Card className="bg-linear-to-br from-white to-slate-50 border-slate-200 shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
               <CardTitle className="text-slate-900">
                 Stats by Call Center
@@ -1000,15 +1113,20 @@ export function Dashboard() {
                               <TooltipContent>
                                 <p className="max-w-xs">
                                   Business hours when the call center is
-                                  actively staffed and taking calls
+                                  actively staffed and taking calls. After-hours
+                                  is defined as from close to next-day open
+                                  (e.g., 8pm → 9am local time).
                                 </p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
                         </TableHead>
                         <TableHead className="text-center text-slate-700 font-semibold min-w-[200px] px-6">
-                          <div className="flex items-center justify-center gap-2">
-                            Total Leads Sent
+                          <div className="flex flex-col items-center justify-center gap-0 leading-tight">
+                            <span>Total Leads Sent</span>
+                            <span className="text-xs text-slate-500">
+                              (All)
+                            </span>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
@@ -1023,8 +1141,11 @@ export function Dashboard() {
                           </div>
                         </TableHead>
                         <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
-                          <div className="flex items-center justify-center gap-2">
-                            Leads Sent (In Hours)
+                          <div className="flex flex-col items-center justify-center gap-0 leading-tight">
+                            <span>Total Leads Sent</span>
+                            <span className="text-xs text-slate-500">
+                              (In-Hours)
+                            </span>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
@@ -1039,8 +1160,11 @@ export function Dashboard() {
                           </div>
                         </TableHead>
                         <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
-                          <div className="flex items-center justify-center gap-2">
-                            Unique Calls (In Hours)
+                          <div className="flex flex-col items-center justify-center gap-0 leading-tight">
+                            <span>Total Unique Calls</span>
+                            <span className="text-xs text-slate-500">
+                              (In-Hours)
+                            </span>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
@@ -1055,8 +1179,11 @@ export function Dashboard() {
                           </div>
                         </TableHead>
                         <TableHead className="text-center text-slate-700 font-semibold min-w-[220px] px-6">
-                          <div className="flex items-center justify-center gap-2">
-                            Call Rate % (In Hours)
+                          <div className="flex flex-col items-center justify-center gap-0 leading-tight">
+                            <span>Call Rate %</span>
+                            <span className="text-xs text-slate-500">
+                              (In-Hours)
+                            </span>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
@@ -1070,9 +1197,12 @@ export function Dashboard() {
                             </Tooltip>
                           </div>
                         </TableHead>
-                        <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
-                          <div className="flex items-center justify-center gap-2">
-                            Leads Sent (After Hours)
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-60 px-6">
+                          <div className="flex flex-col items-center justify-center gap-0 leading-tight">
+                            <span>Total Leads Sent</span>
+                            <span className="text-xs text-slate-500">
+                              (After-Hours)
+                            </span>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
@@ -1080,15 +1210,18 @@ export function Dashboard() {
                               <TooltipContent>
                                 <p className="max-w-xs">
                                   Number of leads sent outside of business
-                                  operating hours
+                                  operating hours (close → next open)
                                 </p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
                         </TableHead>
-                        <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
-                          <div className="flex items-center justify-center gap-2">
-                            Unique Calls (After Hours)
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-60 px-6">
+                          <div className="flex flex-col items-center justify-center gap-0 leading-tight">
+                            <span>Total Unique Calls</span>
+                            <span className="text-xs text-slate-500">
+                              (After-Hours)
+                            </span>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
@@ -1102,9 +1235,12 @@ export function Dashboard() {
                             </Tooltip>
                           </div>
                         </TableHead>
-                        <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
-                          <div className="flex items-center justify-center gap-2">
-                            Call Rate % (After Hours)
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-60 px-6">
+                          <div className="flex flex-col items-center justify-center gap-0 leading-tight">
+                            <span>Call Rate %</span>
+                            <span className="text-xs text-slate-500">
+                              (After-Hours)
+                            </span>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
@@ -1118,9 +1254,12 @@ export function Dashboard() {
                             </Tooltip>
                           </div>
                         </TableHead>
-                        <TableHead className="text-center text-slate-700 font-semibold min-w-[240px] px-6">
-                          <div className="flex items-center justify-center gap-2">
-                            Calls Missed After Hours
+                        <TableHead className="text-center text-slate-700 font-semibold min-w-60 px-6">
+                          <div className="flex flex-col items-center justify-center gap-0 leading-tight">
+                            <span>Total Calls Missed</span>
+                            <span className="text-xs text-slate-500">
+                              (After-Hours)
+                            </span>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
@@ -1150,7 +1289,7 @@ export function Dashboard() {
                               className="border-slate-200 hover:bg-slate-50"
                             >
                               <TableCell className="text-center font-medium text-slate-900 px-6">
-                                {centerStat.callCenter}
+                                {centerStat.callCenter.replace(/_/g, "")}
                               </TableCell>
                               <TableCell className="text-center text-sm text-slate-600 px-6">
                                 {centerStat.operatingHours}
