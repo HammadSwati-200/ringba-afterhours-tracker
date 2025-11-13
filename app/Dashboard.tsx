@@ -337,6 +337,8 @@ export function Dashboard() {
           "Sample call centers:",
           calls.slice(0, 3).map((c) => c.call_center)
         );
+        console.log("Sample call publisher_name:", calls.slice(0, 5).map((c) => c.publisher_name));
+        console.log("Sample call CC_Number:", calls.slice(0, 5).map((c) => c.CC_Number));
       }
 
       if (calls && calls.length > 0) {
@@ -426,6 +428,11 @@ export function Dashboard() {
         map.get(key)!.push(callDate);
       });
 
+      console.log("In-hours call keys by center:", Object.keys(callKeysByCenterInHours).map(centerId => ({
+        centerId,
+        count: callKeysByCenterInHours[centerId].size
+      })));
+
       // Helper: compute next-day in-hours window for a given date and center
       const getNextDayInHoursWindow = (
         date: Date,
@@ -498,6 +505,62 @@ export function Dashboard() {
         leadsByCenter[centerId].push(lead);
       });
 
+      // First, populate after-hours calls for ALL call centers (not just those with leads)
+      // After-hours calls = SMS calls during next-day in-hours
+      const allCentersFromCalls = new Set<string>();
+      allCallsMetadata.forEach((call) => {
+        allCentersFromCalls.add(call.centerId);
+      });
+
+      // Process each call center to find after-hours SMS calls
+      allCentersFromCalls.forEach((centerId) => {
+        if (!callKeysByCenterAfterHours[centerId]) {
+          callKeysByCenterAfterHours[centerId] = new Set();
+        }
+
+        // Get all after-hours leads for this center
+        const centerLeadsAfterHours = (irevLeads || []).filter((lead) => {
+          const leadCenterId = (lead.utm_source || "").replace(/_/g, "");
+          if (leadCenterId !== centerId) return false;
+          const d = new Date((lead.timestampz ?? lead.created_at) as string);
+          return isAfterHours(d, centerId);
+        });
+
+        // For each after-hours lead, check if there's an SMS call during next-day in-hours
+        const afterHoursCallKeys = new Set<string>();
+        centerLeadsAfterHours.forEach((l) => {
+          const key = getLeadKey(l);
+          if (!key) return;
+
+          const leadDate = new Date((l.timestampz ?? l.created_at) as string);
+          const nextDayWindow = getNextDayInHoursWindow(leadDate, centerId);
+          if (!nextDayWindow) return;
+
+          // Find SMS calls for this center during next-day in-hours window
+          const smsCallsInWindow = allCallsMetadata.filter(
+            (call) =>
+              call.centerId === centerId &&
+              call.isSMS &&
+              call.key === key &&
+              call.date >= nextDayWindow.start &&
+              call.date <= nextDayWindow.end
+          );
+
+          if (smsCallsInWindow.length > 0) {
+            afterHoursCallKeys.add(key);
+          }
+        });
+
+        callKeysByCenterAfterHours[centerId] = afterHoursCallKeys;
+
+        // Callbacks = Same as after-hours calls per client feedback
+        if (afterHoursCallKeys.size > 0) {
+          callbacksByCenter[centerId] = afterHoursCallKeys.size;
+          callbackCount += afterHoursCallKeys.size;
+        }
+      });
+
+      // Now process leads by center for lead counts
       Object.keys(leadsByCenter).forEach((centerId) => {
         const leads = leadsByCenter[centerId];
         const leadsInHours = leads.filter((l) => {
@@ -524,43 +587,12 @@ export function Dashboard() {
         byCallCenter[centerId].total = leads.length;
         byCallCenter[centerId].inHours = leadsInHours.length;
         byCallCenter[centerId].afterHours = leadsAfterHours.length;
-
-        // NEW LOGIC: After-hours calls = SMS calls during next-day in-hours
-        // For each after-hours lead, check if there's an SMS call during the next business day
-        const afterHoursCallKeys = new Set<string>();
-        leadsAfterHours.forEach((l) => {
-          const key = getLeadKey(l);
-          if (!key) return;
-
-          const leadDate = new Date((l.timestampz ?? l.created_at) as string);
-          const nextDayWindow = getNextDayInHoursWindow(leadDate, centerId);
-          if (!nextDayWindow) return;
-
-          // Find SMS calls for this center during next-day in-hours window
-          const smsCallsInWindow = allCallsMetadata.filter(
-            (call) =>
-              call.centerId === centerId &&
-              call.isSMS &&
-              call.key === key &&
-              call.date >= nextDayWindow.start &&
-              call.date <= nextDayWindow.end
-          );
-
-          if (smsCallsInWindow.length > 0) {
-            afterHoursCallKeys.add(key);
-          }
-        });
-
-        // Store after-hours call keys for this center
-        callKeysByCenterAfterHours[centerId] = afterHoursCallKeys;
-
-        // Callbacks = Same as after-hours calls per client feedback
-        // "Recovery is the same as after call"
-        if (afterHoursCallKeys.size > 0) {
-          callbacksByCenter[centerId] = afterHoursCallKeys.size;
-          callbackCount += afterHoursCallKeys.size;
-        }
       });
+
+      console.log("After-hours call keys by center:", Object.keys(callKeysByCenterAfterHours).map(centerId => ({
+        centerId,
+        count: callKeysByCenterAfterHours[centerId]?.size || 0
+      })));
 
       // Build call center stats combining irev_leads and calls data (joined by cid/click_id)
       const callCenterStatsMap: { [key: string]: CallCenterStats } = {};
@@ -604,8 +636,9 @@ export function Dashboard() {
           : "No hours configured";
 
         // Total leads (all / in-hours / after-hours)
+        // IMPORTANT: Normalize lead.utm_source for comparison (remove underscores)
         const centerLeads = (irevLeads || []).filter(
-          (lead) => lead.utm_source === centerId
+          (lead) => lead.utm_source?.replace(/_/g, "") === centerId
         );
         const totalLeadsSent = centerLeads.length;
         const centerLeadsInHours = centerLeads.filter((lead) => {
