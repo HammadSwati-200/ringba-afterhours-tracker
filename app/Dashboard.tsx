@@ -220,13 +220,17 @@ export function Dashboard() {
       const hasSession = !!data.session;
       setIsAuthenticated(hasSession);
       if (!hasSession) {
+        setLoading(false); // stop spinner while redirecting
         router.push("/login");
       }
       const { data: listener } = supabase.auth.onAuthStateChange(
         (_event, session) => {
           const ok = !!session;
           setIsAuthenticated(ok);
-          if (!ok) router.push("/login");
+          if (!ok) {
+            setLoading(false);
+            router.push("/login");
+          }
         }
       );
       unsub = () => listener.subscription.unsubscribe();
@@ -281,7 +285,11 @@ export function Dashboard() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    loadStats();
+    const cancelled = false;
+    (async () => {
+      await loadStats();
+      if (cancelled) return;
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange, selectedCallCenter, isAuthenticated]);
 
