@@ -575,6 +575,73 @@ export function Dashboard() {
         return { start, end };
       };
 
+      // Helper: build day-based windows for a center between selected from→to (local time)
+      const getDailyWindows = (
+        centerId: string,
+        from: Date,
+        to: Date
+      ): {
+        inHours: Array<{ start: Date; end: Date }>;
+        afterHours: Array<{ start: Date; end: Date }>;
+      } => {
+        const normalizedId = centerId.replace(/_/g, "");
+        const cfg = callCenterHours.find(
+          (cc) =>
+            cc.id.replace(/_/g, "") === normalizedId ||
+            cc.name.replace(/_/g, "") === normalizedId ||
+            cc.id === centerId ||
+            cc.name === centerId
+        );
+        const result = {
+          inHours: [] as Array<{ start: Date; end: Date }>,
+          afterHours: [] as Array<{ start: Date; end: Date }>,
+        };
+        if (
+          !cfg ||
+          cfg.startHour === undefined ||
+          cfg.endHour === undefined ||
+          !cfg.daysOfWeek
+        )
+          return result;
+
+        const addHours = (dt: Date, hour: number) => {
+          const h = Math.floor(hour);
+          const m = Math.round((hour % 1) * 60);
+          const d = new Date(dt);
+          d.setHours(h, m, 0, 0);
+          return d;
+        };
+
+        // iterate per day from 'from' to 'to' inclusive
+        const cursor = new Date(from);
+        cursor.setHours(0, 0, 0, 0);
+        const endDay = new Date(to);
+        endDay.setHours(0, 0, 0, 0);
+        while (cursor <= endDay) {
+          const day = cursor.getDay();
+          // in-hours window for this day
+          if (cfg.daysOfWeek.includes(day)) {
+            const start = addHours(cursor, cfg.startHour);
+            const end = addHours(cursor, cfg.endHour);
+            result.inHours.push({ start, end });
+          }
+          // after-hours window for this day = close(D) → open(D+1) if next day in operating days
+          const closeD = addHours(cursor, cfg.endHour);
+          const next = new Date(cursor);
+          next.setDate(next.getDate() + 1);
+          const nextDay = next.getDay();
+          if (
+            cfg.daysOfWeek.includes(day) &&
+            cfg.daysOfWeek.includes(nextDay)
+          ) {
+            const openNext = addHours(next, cfg.startHour);
+            result.afterHours.push({ start: closeD, end: openNext });
+          }
+          cursor.setDate(cursor.getDate() + 1);
+        }
+        return result;
+      };
+
       // Build per-center stats based on irev leads and matched Ringba calls via cid/click_id
       const byCallCenter: {
         [key: string]: {
@@ -610,18 +677,20 @@ export function Dashboard() {
         allCentersFromCalls.add(call.centerId);
       });
 
-      // Process each call center to find after-hours SMS calls
+      // Process each call center to find after-hours SMS/DID callbacks (next-day in-hours)
       allCentersFromCalls.forEach((centerId) => {
         if (!callKeysByCenterAfterHours[centerId]) {
           callKeysByCenterAfterHours[centerId] = new Set();
         }
 
-        // Get all after-hours leads for this center
-        const centerLeadsAfterHours = (irevLeads || []).filter((lead) => {
-          const leadCenterId = (lead.utm_source || "").replace(/_/g, "");
-          if (leadCenterId !== centerId) return false;
-          const d = new Date((lead.timestampz ?? lead.created_at) as string);
-          return isAfterHours(d, centerId);
+        // Get all after-hours leads for this center using same-day windowing
+        const windows = getDailyWindows(centerId, startDate, adjustedEndDate);
+        const centerLeads = (irevLeads || []).filter(
+          (lead) => (lead.utm_source || "").replace(/_/g, "") === centerId
+        );
+        const centerLeadsAfterHours = centerLeads.filter((lead) => {
+          const t = new Date((lead.timestampz ?? lead.created_at) as string);
+          return windows.afterHours.some((w) => t >= w.start && t < w.end);
         });
 
         // For each after-hours lead, check if there's an SMS call during next-day in-hours
@@ -657,16 +726,17 @@ export function Dashboard() {
         }
       });
 
-      // Now process leads by center for lead counts
+      // Now process leads by center for lead counts (same-day windowing)
       Object.keys(leadsByCenter).forEach((centerId) => {
         const leads = leadsByCenter[centerId];
+        const windows = getDailyWindows(centerId, startDate, adjustedEndDate);
         const leadsInHours = leads.filter((l) => {
           const d = new Date((l.timestampz ?? l.created_at) as string);
-          return !isAfterHours(d, centerId);
+          return windows.inHours.some((w) => d >= w.start && d < w.end);
         });
         const leadsAfterHours = leads.filter((l) => {
           const d = new Date((l.timestampz ?? l.created_at) as string);
-          return isAfterHours(d, centerId);
+          return windows.afterHours.some((w) => d >= w.start && d < w.end);
         });
 
         totalLeadsInHoursAll += leadsInHours.length;
@@ -735,19 +805,28 @@ export function Dashboard() {
           ? formatOperatingHours(centerId)
           : "No hours configured";
 
-        // Total leads (all / in-hours / after-hours)
+        // Total leads (all / in-hours / after-hours) using same-day windows
         // IMPORTANT: Normalize lead.utm_source for comparison (remove underscores)
         const centerLeads = (irevLeads || []).filter(
           (lead) => lead.utm_source?.replace(/_/g, "") === centerId
         );
         const totalLeadsSent = centerLeads.length;
+        const windowsForCenter = getDailyWindows(
+          centerId,
+          startDate,
+          adjustedEndDate
+        );
         const centerLeadsInHours = centerLeads.filter((lead) => {
           const d = new Date(lead.timestampz || lead.created_at);
-          return !isAfterHours(d, centerId);
+          return windowsForCenter.inHours.some(
+            (w) => d >= w.start && d < w.end
+          );
         });
         const centerLeadsAfterHours = centerLeads.filter((lead) => {
           const d = new Date(lead.timestampz || lead.created_at);
-          return isAfterHours(d, centerId);
+          return windowsForCenter.afterHours.some(
+            (w) => d >= w.start && d < w.end
+          );
         });
         const totalLeadsSentInHours = centerLeadsInHours.length;
         const totalLeadsSentAfterHours = centerLeadsAfterHours.length;
