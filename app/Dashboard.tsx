@@ -31,8 +31,8 @@ interface LeadRow {
   phone_number_norm?: string;
   phone_number?: string;
 }
-// Optional: SMS DID allowlist (currently used for debugging/validation only)
-export const SMS_DIDS: string[] = [
+// All DID numbers (normalized, no +1). Used to detect DID callbacks next day.
+export const ALL_DIDS: string[] = [
   "18334411529",
   "18334362190",
   "18334310623",
@@ -471,6 +471,7 @@ export function Dashboard() {
         date: Date;
         centerId: string;
         isSMS: boolean;
+        isOnDid: boolean;
         isInHours: boolean;
       }
       const allCallsMetadata: CallMetadata[] = [];
@@ -484,11 +485,12 @@ export function Dashboard() {
           (call.created_at ?? call.call_date) as string
         );
 
-        // Determine if this is an SMS call (publisher_name contains 'sms' OR CC_Number in SMS_DIDS)
-        const isSMS =
-          /sms/i.test(call.publisher_name || "") ||
-          (normalizeDid(call.CC_Number) !== null &&
-            SMS_DIDS.includes(normalizeDid(call.CC_Number)!));
+        // Determine if SMS by publisher, and whether the call landed on a known DID
+        const isSMS = /sms/i.test(call.publisher_name || "");
+        const isOnDid = ((): boolean => {
+          const did = normalizeDid(call.CC_Number);
+          return !!(did && ALL_DIDS.includes(did));
+        })();
 
         // Determine if call timestamp is during business hours
         const isInHours = !isAfterHours(callDate, centerId);
@@ -511,6 +513,7 @@ export function Dashboard() {
           date: callDate,
           centerId,
           isSMS,
+          isOnDid,
           isInHours,
         });
 
@@ -634,7 +637,7 @@ export function Dashboard() {
           // Find SMS calls for this center during next-day in-hours window
           const smsCallsInWindow = allCallsMetadata.filter(
             (call) =>
-              call.isSMS &&
+              (call.isSMS || call.isOnDid) &&
               call.key === key &&
               call.date >= nextDayWindow.start &&
               call.date <= nextDayWindow.end
