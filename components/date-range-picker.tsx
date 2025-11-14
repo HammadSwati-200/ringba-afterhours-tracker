@@ -109,7 +109,10 @@ export function DateRangePicker({
 
   const formatDate = (date: Date | null) => {
     if (!date) return "";
-    return date.toISOString().split("T")[0];
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`; // local date, avoids UTC shift
   };
 
   return (
@@ -218,7 +221,7 @@ export function DateRangePicker({
             </Button>
             <Button
               size="sm"
-              className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-medium"
+              className="bg-linear-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-medium"
               onClick={handleConfirm}
             >
               Confirm

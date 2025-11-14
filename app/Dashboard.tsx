@@ -31,39 +31,38 @@ interface LeadRow {
   phone_number_norm?: string;
   phone_number?: string;
 }
-// DID to Call Center mapping used for after-hours override
-// If a call's CC_Number (stripped of +1) matches any DID here, treat that call as after-hours
-const DID_TO_CALL_CENTER: { [did: string]: { cc: string; hasHours: boolean } } =
-  {
-    "18334411529": { cc: "CC1", hasHours: true },
-    "18334362190": { cc: "CC2", hasHours: true },
-    "18334310623": { cc: "CC3", hasHours: false },
-    "18334410032": { cc: "CC4", hasHours: false },
-    "18334310301": { cc: "CC5", hasHours: false },
-    "18334320783": { cc: "CC6", hasHours: false },
-    "18334370501": { cc: "CC7", hasHours: true },
-    "18334411630": { cc: "CC8", hasHours: false },
-    "18334412492": { cc: "CC9", hasHours: true },
-    "18334412564": { cc: "CC10", hasHours: true },
-    "18334411593": { cc: "CC12", hasHours: true },
-    "18334411506": { cc: "CC13", hasHours: true },
-    "18334412568": { cc: "CC_14", hasHours: true },
-    "18334362221": { cc: "CC14B", hasHours: true },
-    "18334950158": { cc: "CC14C", hasHours: true },
-    "18557020153": { cc: "CC14D", hasHours: true },
-    "18339913927": { cc: "CC14E", hasHours: true },
-    "18334410027": { cc: "CC15", hasHours: true },
-    "18334412573": { cc: "CC16", hasHours: true },
-    "18334300436": { cc: "CC17", hasHours: true },
-    "18339951463": { cc: "CC19", hasHours: true },
-    "18339923833": { cc: "CC20", hasHours: true },
-    "18339923731": { cc: "CC21", hasHours: true },
-    "18337018811": { cc: "CC22", hasHours: true },
-    "18337731567": { cc: "CC23A", hasHours: true },
-    "18338360164": { cc: "CC23B", hasHours: true },
-    "18339403006": { cc: "CC24", hasHours: true },
-    "18337564307": { cc: "CC25", hasHours: true },
-  };
+// Optional: SMS DID allowlist (currently used for debugging/validation only)
+export const SMS_DIDS: string[] = [
+  "18334411529",
+  "18334362190",
+  "18334310623",
+  "18334410032",
+  "18334310301",
+  "18334320783",
+  "18334370501",
+  "18334411630",
+  "18334412492",
+  "18334412564",
+  "18334411593",
+  "18334411506",
+  "18334412568",
+  "18334362221",
+  "18334950158",
+  "18557020153",
+  "18339913927",
+  "18334410027",
+  "18334412573",
+  "18334300436",
+  "18339951463",
+  "18339923833",
+  "18339923731",
+  "18337018811",
+  "18337731567",
+  "18338360164",
+  "18339403006",
+  "18337564307",
+  "18334412617",
+];
 import {
   Card,
   CardContent,
@@ -150,6 +149,11 @@ export function Dashboard() {
   const [stats, setStats] = useState<AfterHoursStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [debugMode, setDebugMode] = useState<boolean>(false);
+  const [debugData, setDebugData] = useState<Record<string, unknown> | null>(
+    null
+  );
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -166,6 +170,20 @@ export function Dashboard() {
   const router = useRouter();
   const supabase = createClient();
 
+  // Helpers to handle dates in local time (avoid UTC off-by-one)
+  const formatLocalDate = (d: Date) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+  const parseLocalDate = (s: string) => {
+    const [y, m, d] = s.split("-").map((n) => parseInt(n, 10));
+    const dt = new Date(y, (m || 1) - 1, d || 1);
+    dt.setHours(0, 0, 0, 0);
+    return dt;
+  };
+
   // Sync filters with URL params
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -173,12 +191,11 @@ export function Dashboard() {
     const endDate = params.get("endDate");
     const callCenter = params.get("callCenter");
     const filter = params.get("filter");
+    const debug = params.get("debug");
 
     if (startDate && endDate) {
-      const from = new Date(startDate);
-      from.setHours(0, 0, 0, 0);
-      const to = new Date(endDate);
-      to.setHours(0, 0, 0, 0);
+      const from = parseLocalDate(startDate);
+      const to = parseLocalDate(endDate);
       setDateRange({
         from,
         to,
@@ -190,9 +207,36 @@ export function Dashboard() {
     if (filter) {
       setActiveFilter(filter);
     }
-  }, []);
+    if (debug === "1" || debug === "true") {
+      setDebugMode(true);
+    }
+  }, [router, supabase.auth]);
 
-  // Update URL when filters change (only if not default)
+  // Auth guard: redirect to /login when not authenticated and prevent data loads
+  useEffect(() => {
+    let unsub: (() => void) | null = null;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      const hasSession = !!data.session;
+      setIsAuthenticated(hasSession);
+      if (!hasSession) {
+        router.push("/login");
+      }
+      const { data: listener } = supabase.auth.onAuthStateChange(
+        (_event, session) => {
+          const ok = !!session;
+          setIsAuthenticated(ok);
+          if (!ok) router.push("/login");
+        }
+      );
+      unsub = () => listener.subscription.unsubscribe();
+    })();
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [router, supabase.auth]);
+
+  // Update URL when filters change (only if not default). Preserve debug param when enabled.
   useEffect(() => {
     if (dateRange?.from && dateRange?.to) {
       const today = new Date();
@@ -203,38 +247,43 @@ export function Dashboard() {
       const defaultEnd = new Date(today);
 
       const isDefaultDateRange =
-        dateRange.from.toISOString().split("T")[0] ===
-          defaultStart.toISOString().split("T")[0] &&
-        dateRange.to.toISOString().split("T")[0] ===
-          defaultEnd.toISOString().split("T")[0];
+        formatLocalDate(dateRange.from) === formatLocalDate(defaultStart) &&
+        formatLocalDate(dateRange.to) === formatLocalDate(defaultEnd);
 
       const isDefaultCallCenter = selectedCallCenter === "all";
       const isDefaultFilter = activeFilter === "last7Days";
 
       if (!isDefaultDateRange || !isDefaultCallCenter || !isDefaultFilter) {
         const params = new URLSearchParams();
-        params.set("startDate", dateRange.from.toISOString().split("T")[0]);
-        params.set("endDate", dateRange.to.toISOString().split("T")[0]);
+        params.set("startDate", formatLocalDate(dateRange.from));
+        params.set("endDate", formatLocalDate(dateRange.to));
         if (!isDefaultCallCenter) {
           params.set("callCenter", selectedCallCenter);
         }
         if (activeFilter) {
           params.set("filter", activeFilter);
         }
+        if (debugMode) {
+          params.set("debug", "1");
+        }
 
         const newUrl = `${window.location.pathname}?${params.toString()}`;
         window.history.replaceState({}, "", newUrl);
       } else {
-        // Clear params if back to default
-        window.history.replaceState({}, "", window.location.pathname);
+        // Clear params if back to default but preserve debug flag if enabled
+        const newUrl = debugMode
+          ? `${window.location.pathname}?debug=1`
+          : window.location.pathname;
+        window.history.replaceState({}, "", newUrl);
       }
     }
-  }, [dateRange, selectedCallCenter, activeFilter]);
+  }, [dateRange, selectedCallCenter, activeFilter, debugMode]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     loadStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange, selectedCallCenter]);
+  }, [dateRange, selectedCallCenter, isAuthenticated]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -337,8 +386,14 @@ export function Dashboard() {
           "Sample call centers:",
           calls.slice(0, 3).map((c) => c.call_center)
         );
-        console.log("Sample call publisher_name:", calls.slice(0, 5).map((c) => c.publisher_name));
-        console.log("Sample call CC_Number:", calls.slice(0, 5).map((c) => c.CC_Number));
+        console.log(
+          "Sample call publisher_name:",
+          calls.slice(0, 5).map((c) => c.publisher_name)
+        );
+        console.log(
+          "Sample call CC_Number:",
+          calls.slice(0, 5).map((c) => c.CC_Number)
+        );
       }
 
       if (calls && calls.length > 0) {
@@ -360,16 +415,39 @@ export function Dashboard() {
         return;
       }
 
-      // Helper: prefer click_id for matching with irev cid; fallback to phone
-      const getCallKey = (c: CallRow): string | null =>
-        c?.click_id || c?.clickId || c?.caller_phone || null;
-      const getLeadKey = (l: LeadRow): string | null =>
-        l?.cid ||
-        l?.click_id ||
-        l?.clickId ||
-        l?.phone_number_norm ||
-        l?.phone_number ||
-        null;
+      // Normalize phone number to 10-digit (last 10 of digits-only), for stable matching
+      const normalizePhone = (raw?: string | null): string | null => {
+        if (!raw) return null;
+        const digits = String(raw).replace(/\D/g, "");
+        if (!digits) return null;
+        // Use last 10 digits (US numbers), else use all if shorter
+        return digits.length > 10 ? digits.slice(-10) : digits;
+      };
+
+      const normalizeDid = (raw?: string | null): string | null => {
+        if (!raw) return null;
+        const digits = String(raw).replace(/\D/g, "");
+        if (!digits) return null;
+        // Drop leading country code 1 if present
+        return digits.length === 11 && digits.startsWith("1")
+          ? digits.slice(1)
+          : digits;
+      };
+
+      // Helper: prefer click_id for matching; fallback to normalized phone
+      const getCallKey = (c: CallRow): string | null => {
+        return c?.click_id || c?.clickId || normalizePhone(c?.caller_phone);
+      };
+      const getLeadKey = (l: LeadRow): string | null => {
+        return (
+          l?.cid ||
+          l?.click_id ||
+          l?.clickId ||
+          normalizePhone(l?.phone_number_norm) ||
+          normalizePhone(l?.phone_number) ||
+          null
+        );
+      };
 
       // NEW LOGIC per client feedback:
       // In-Hours Calls: All calls during business hours that are NOT SMS
@@ -398,11 +476,11 @@ export function Dashboard() {
           (call.created_at ?? call.call_date) as string
         );
 
-        // Determine if this is an SMS call (publisher_name contains "SMS" OR CC_Number is SMS DID)
-        const isSMS = !!(
-          call.publisher_name?.includes("SMS") ||
-          (call.CC_Number && DID_TO_CALL_CENTER[call.CC_Number.replace(/^\+1/, "")])
-        );
+        // Determine if this is an SMS call (publisher_name contains 'sms' OR CC_Number in SMS_DIDS)
+        const isSMS =
+          /sms/i.test(call.publisher_name || "") ||
+          (normalizeDid(call.CC_Number) !== null &&
+            SMS_DIDS.includes(normalizeDid(call.CC_Number)!));
 
         // Determine if call timestamp is during business hours
         const isInHours = !isAfterHours(callDate, centerId);
@@ -420,7 +498,13 @@ export function Dashboard() {
         }
 
         // Store all call metadata for after-hours processing
-        allCallsMetadata.push({ key, date: callDate, centerId, isSMS, isInHours });
+        allCallsMetadata.push({
+          key,
+          date: callDate,
+          centerId,
+          isSMS,
+          isInHours,
+        });
 
         // Store all calls by center for date mapping
         const map = callsByCenterKeyDates[centerId]!;
@@ -428,10 +512,13 @@ export function Dashboard() {
         map.get(key)!.push(callDate);
       });
 
-      console.log("In-hours call keys by center:", Object.keys(callKeysByCenterInHours).map(centerId => ({
-        centerId,
-        count: callKeysByCenterInHours[centerId].size
-      })));
+      console.log(
+        "In-hours call keys by center:",
+        Object.keys(callKeysByCenterInHours).map((centerId) => ({
+          centerId,
+          count: callKeysByCenterInHours[centerId].size,
+        }))
+      );
 
       // Helper: compute next-day in-hours window for a given date and center
       const getNextDayInHoursWindow = (
@@ -539,7 +626,6 @@ export function Dashboard() {
           // Find SMS calls for this center during next-day in-hours window
           const smsCallsInWindow = allCallsMetadata.filter(
             (call) =>
-              call.centerId === centerId &&
               call.isSMS &&
               call.key === key &&
               call.date >= nextDayWindow.start &&
@@ -589,10 +675,13 @@ export function Dashboard() {
         byCallCenter[centerId].afterHours = leadsAfterHours.length;
       });
 
-      console.log("After-hours call keys by center:", Object.keys(callKeysByCenterAfterHours).map(centerId => ({
-        centerId,
-        count: callKeysByCenterAfterHours[centerId]?.size || 0
-      })));
+      console.log(
+        "After-hours call keys by center:",
+        Object.keys(callKeysByCenterAfterHours).map((centerId) => ({
+          centerId,
+          count: callKeysByCenterAfterHours[centerId]?.size || 0,
+        }))
+      );
 
       // Build call center stats combining irev_leads and calls data (joined by cid/click_id)
       const callCenterStatsMap: { [key: string]: CallCenterStats } = {};
@@ -745,6 +834,46 @@ export function Dashboard() {
             : 0,
         byCallCenter,
         callCenterStats,
+      });
+
+      // Prepare debug summary for verification against DB
+      const leadsInHoursCounts: Record<string, number> = {};
+      const leadsAfterHoursCounts: Record<string, number> = {};
+      Object.keys(leadsByCenter).forEach((centerId) => {
+        const leads = leadsByCenter[centerId];
+        leadsInHoursCounts[centerId] = leads.filter((l) => {
+          const d = new Date((l.timestampz ?? l.created_at) as string);
+          return !isAfterHours(d, centerId);
+        }).length;
+        leadsAfterHoursCounts[centerId] = leads.filter((l) => {
+          const d = new Date((l.timestampz ?? l.created_at) as string);
+          return isAfterHours(d, centerId);
+        }).length;
+      });
+
+      const callKeysInCounts = Object.fromEntries(
+        Object.entries(callKeysByCenterInHours).map(([cc, set]) => [
+          cc,
+          set.size,
+        ])
+      );
+      const callKeysAfterCounts = Object.fromEntries(
+        Object.entries(callKeysByCenterAfterHours).map(([cc, set]) => [
+          cc,
+          set.size,
+        ])
+      );
+
+      setDebugData({
+        dateRange: {
+          start: startDate.toISOString(),
+          end: adjustedEndDate.toISOString(),
+        },
+        leadsInHoursCounts,
+        leadsAfterHoursCounts,
+        callKeysInHoursCounts: callKeysInCounts,
+        callKeysAfterHoursCounts: callKeysAfterCounts,
+        callbacksByCenter,
       });
     } catch (err: unknown) {
       console.error("Error loading stats:", err);
@@ -944,6 +1073,32 @@ export function Dashboard() {
                   <FileText className="mr-2 h-4 w-4" />
                   Export as CSV
                 </DropdownMenuItem>
+                {debugMode && (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (!debugData) return;
+                      const blob = new Blob(
+                        [JSON.stringify(debugData, null, 2)],
+                        {
+                          type: "application/json",
+                        }
+                      );
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `debug-${
+                        new Date().toISOString().split("T")[0]
+                      }.json`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    <FileJson className="mr-2 h-4 w-4" />
+                    Export Debug JSON
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
 
