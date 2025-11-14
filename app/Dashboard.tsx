@@ -184,6 +184,117 @@ export function Dashboard() {
     return dt;
   };
 
+  // Map short tz codes from config to IANA
+  const toIanaTz = (tz?: string): string => {
+    if (!tz) return "America/Los_Angeles";
+    const t = tz.toUpperCase();
+    if (t === "PST" || t === "PT") return "America/Los_Angeles";
+    if (t === "MST" || t === "MT") return "America/Denver";
+    return tz; // assume already IANA
+  };
+
+  const normalizeCC = (id?: string) => (id || "").replace(/_/g, "").trim();
+
+  const getCenterCfg = (centerId: string) => {
+    const nid = normalizeCC(centerId);
+    const cfg = callCenterHours.find(
+      (cc) => normalizeCC(cc.id) === nid || normalizeCC(cc.name) === nid
+    );
+    if (!cfg) return null;
+    const tz = toIanaTz(cfg.timezone as string | undefined);
+    const openMin =
+      cfg.startHour != null ? Math.round(Number(cfg.startHour) * 60) : 8 * 60;
+    const closeMin =
+      cfg.endHour != null ? Math.round(Number(cfg.endHour) * 60) : 21 * 60;
+    const days = Array.isArray(cfg.daysOfWeek)
+      ? (cfg.daysOfWeek as number[])
+      : [0, 1, 2, 3, 4, 5, 6];
+    return { tz, openMin, closeMin, days };
+  };
+
+  const getLocalParts = (d: Date, timeZone: string) => {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(d);
+    const take = (t: string): string => {
+      const v = parts.find((p) => p.type === t)?.value;
+      return v ?? "0";
+    };
+    const yyyy = Number(take("year"));
+    const mm = Number(take("month"));
+    const dd = Number(take("day"));
+    const wdStr = take("weekday");
+    const weekdayMap: Record<string, number> = {
+      Sun: 0,
+      Mon: 1,
+      Tue: 2,
+      Wed: 3,
+      Thu: 4,
+      Fri: 5,
+      Sat: 6,
+    };
+    const wd = weekdayMap[wdStr] ?? 0;
+    const hh = Number(take("hour"));
+    const min = Number(take("minute"));
+    return { yyyy, mm, dd, weekday: wd, minutes: hh * 60 + min };
+  };
+
+  // Classify a lead timestamp into 'in' or 'after' and compute label day for attribution
+  // Day D after-hours = prev-night close(D-1)→open(D) (labeled as D) AND same-day close(D)→24:00 (labeled as D)
+  // Classifier for leads (exposed for internal use/debug)
+  const classifyLeadWithLabel = (
+    leadTimestamp: string,
+    centerId: string
+  ): {
+    bucket: "in" | "after";
+    labelY: number;
+    labelM: number;
+    labelD: number;
+  } | null => {
+    const cfg = getCenterCfg(centerId);
+    if (!cfg) return null;
+    const { tz, openMin, closeMin, days } = cfg;
+    const parts = getLocalParts(new Date(leadTimestamp), tz);
+
+    // Build label date initially from the local date
+    let labelY = parts.yyyy;
+    let labelM = parts.mm;
+    let labelD = parts.dd;
+
+    // If next-day mapping (>= close) attribute to next day
+    if (parts.minutes >= closeMin) {
+      const dt = new Date(Date.UTC(parts.yyyy, parts.mm - 1, parts.dd));
+      dt.setUTCDate(dt.getUTCDate() + 1);
+      labelY = dt.getUTCFullYear();
+      labelM = dt.getUTCMonth() + 1;
+      labelD = dt.getUTCDate();
+      return { bucket: "after", labelY, labelM, labelD };
+    }
+
+    // If day is closed, whole day after-hours (label = same day)
+    if (!days.includes(parts.weekday)) {
+      return { bucket: "after", labelY, labelM, labelD };
+    }
+
+    // 00:00→open = after-hours (label = same day)
+    if (parts.minutes < openMin) {
+      return { bucket: "after", labelY, labelM, labelD };
+    }
+    // open→close = in-hours (label = same day)
+    if (parts.minutes >= openMin && parts.minutes < closeMin) {
+      return { bucket: "in", labelY, labelM, labelD };
+    }
+    // Fallback
+    return { bucket: "after", labelY, labelM, labelD };
+  };
+
   // Sync filters with URL params
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -684,13 +795,16 @@ export function Dashboard() {
         }
 
         // Get all after-hours leads for this center using same-day windowing
-        const windows = getDailyWindows(centerId, startDate, adjustedEndDate);
+        // Collect center leads in range
         const centerLeads = (irevLeads || []).filter(
           (lead) => (lead.utm_source || "").replace(/_/g, "") === centerId
         );
         const centerLeadsAfterHours = centerLeads.filter((lead) => {
-          const t = new Date((lead.timestampz ?? lead.created_at) as string);
-          return windows.afterHours.some((w) => t >= w.start && t < w.end);
+          const res = classifyLeadWithLabel(
+            (lead.timestampz ?? lead.created_at) as string,
+            centerId
+          );
+          return res?.bucket === "after";
         });
 
         // For each after-hours lead, check if there's an SMS call during next-day in-hours
@@ -729,14 +843,19 @@ export function Dashboard() {
       // Now process leads by center for lead counts (same-day windowing)
       Object.keys(leadsByCenter).forEach((centerId) => {
         const leads = leadsByCenter[centerId];
-        const windows = getDailyWindows(centerId, startDate, adjustedEndDate);
         const leadsInHours = leads.filter((l) => {
-          const d = new Date((l.timestampz ?? l.created_at) as string);
-          return windows.inHours.some((w) => d >= w.start && d < w.end);
+          const res = classifyLeadWithLabel(
+            (l.timestampz ?? l.created_at) as string,
+            centerId
+          );
+          return res?.bucket === "in";
         });
         const leadsAfterHours = leads.filter((l) => {
-          const d = new Date((l.timestampz ?? l.created_at) as string);
-          return windows.afterHours.some((w) => d >= w.start && d < w.end);
+          const res = classifyLeadWithLabel(
+            (l.timestampz ?? l.created_at) as string,
+            centerId
+          );
+          return res?.bucket === "after";
         });
 
         totalLeadsInHoursAll += leadsInHours.length;
