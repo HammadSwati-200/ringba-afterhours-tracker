@@ -183,117 +183,6 @@ export function Dashboard() {
     return dt;
   };
 
-  // Map short tz codes from config to IANA
-  const toIanaTz = (tz?: string): string => {
-    if (!tz) return "America/Los_Angeles";
-    const t = tz.toUpperCase();
-    if (t === "PST" || t === "PT") return "America/Los_Angeles";
-    if (t === "MST" || t === "MT") return "America/Denver";
-    return tz; // assume already IANA
-  };
-
-  const normalizeCC = (id?: string) => (id || "").replace(/_/g, "").trim();
-
-  const getCenterCfg = (centerId: string) => {
-    const nid = normalizeCC(centerId);
-    const cfg = callCenterHours.find(
-      (cc) => normalizeCC(cc.id) === nid || normalizeCC(cc.name) === nid
-    );
-    if (!cfg) return null;
-    const tz = toIanaTz(cfg.timezone as string | undefined);
-    const openMin =
-      cfg.startHour != null ? Math.round(Number(cfg.startHour) * 60) : 8 * 60;
-    const closeMin =
-      cfg.endHour != null ? Math.round(Number(cfg.endHour) * 60) : 21 * 60;
-    const days = Array.isArray(cfg.daysOfWeek)
-      ? (cfg.daysOfWeek as number[])
-      : [0, 1, 2, 3, 4, 5, 6];
-    return { tz, openMin, closeMin, days };
-  };
-
-  const getLocalParts = (d: Date, timeZone: string) => {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      weekday: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).formatToParts(d);
-    const take = (t: string): string => {
-      const v = parts.find((p) => p.type === t)?.value;
-      return v ?? "0";
-    };
-    const yyyy = Number(take("year"));
-    const mm = Number(take("month"));
-    const dd = Number(take("day"));
-    const wdStr = take("weekday");
-    const weekdayMap: Record<string, number> = {
-      Sun: 0,
-      Mon: 1,
-      Tue: 2,
-      Wed: 3,
-      Thu: 4,
-      Fri: 5,
-      Sat: 6,
-    };
-    const wd = weekdayMap[wdStr] ?? 0;
-    const hh = Number(take("hour"));
-    const min = Number(take("minute"));
-    return { yyyy, mm, dd, weekday: wd, minutes: hh * 60 + min };
-  };
-
-  // Classify a lead timestamp into 'in' or 'after' and compute label day for attribution
-  // Day D after-hours = prev-night close(D-1)→open(D) (labeled as D) AND same-day close(D)→24:00 (labeled as D)
-  // Classifier for leads (exposed for internal use/debug)
-  const classifyLeadWithLabel = (
-    leadTimestamp: string,
-    centerId: string
-  ): {
-    bucket: "in" | "after";
-    labelY: number;
-    labelM: number;
-    labelD: number;
-  } | null => {
-    const cfg = getCenterCfg(centerId);
-    if (!cfg) return null;
-    const { tz, openMin, closeMin, days } = cfg;
-    const parts = getLocalParts(new Date(leadTimestamp), tz);
-
-    // Build label date initially from the local date
-    let labelY = parts.yyyy;
-    let labelM = parts.mm;
-    let labelD = parts.dd;
-
-    // If next-day mapping (>= close) attribute to next day
-    if (parts.minutes >= closeMin) {
-      const dt = new Date(Date.UTC(parts.yyyy, parts.mm - 1, parts.dd));
-      dt.setUTCDate(dt.getUTCDate() + 1);
-      labelY = dt.getUTCFullYear();
-      labelM = dt.getUTCMonth() + 1;
-      labelD = dt.getUTCDate();
-      return { bucket: "after", labelY, labelM, labelD };
-    }
-
-    // If day is closed, whole day after-hours (label = same day)
-    if (!days.includes(parts.weekday)) {
-      return { bucket: "after", labelY, labelM, labelD };
-    }
-
-    // 00:00→open = after-hours (label = same day)
-    if (parts.minutes < openMin) {
-      return { bucket: "after", labelY, labelM, labelD };
-    }
-    // open→close = in-hours (label = same day)
-    if (parts.minutes >= openMin && parts.minutes < closeMin) {
-      return { bucket: "in", labelY, labelM, labelD };
-    }
-    // Fallback
-    return { bucket: "after", labelY, labelM, labelD };
-  };
-
   // Sync filters with URL params
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -560,16 +449,6 @@ export function Dashboard() {
       const getCallKey = (c: CallRow): string | null => {
         return c?.click_id || c?.clickId || normalizePhone(c?.caller_phone);
       };
-      const getLeadKey = (l: LeadRow): string | null => {
-        return (
-          l?.cid ||
-          l?.click_id ||
-          l?.clickId ||
-          normalizePhone(l?.phone_number_norm) ||
-          normalizePhone(l?.phone_number) ||
-          null
-        );
-      };
 
       // NEW LOGIC per client feedback:
       // In-Hours Calls: All calls during business hours that are NOT SMS
@@ -645,50 +524,6 @@ export function Dashboard() {
         }))
       );
 
-      // Helper: compute next-day in-hours window for a given date and center
-      const getNextDayInHoursWindow = (
-        date: Date,
-        centerId: string
-      ): { start: Date; end: Date } | null => {
-        const normalizedId = centerId.replace(/_/g, "");
-        const cfg = callCenterHours.find(
-          (cc) =>
-            cc.id.replace(/_/g, "") === normalizedId ||
-            cc.name.replace(/_/g, "") === normalizedId ||
-            cc.id === centerId ||
-            cc.name === centerId
-        );
-        if (
-          !cfg ||
-          cfg.startHour === undefined ||
-          cfg.endHour === undefined ||
-          !cfg.daysOfWeek
-        )
-          return null;
-        const next = new Date(date);
-        next.setDate(next.getDate() + 1);
-        next.setHours(0, 0, 0, 0);
-        // build start/end on next day (naive local time)
-        const start = new Date(next);
-        start.setHours(
-          Math.floor(cfg.startHour),
-          Math.round((cfg.startHour % 1) * 60),
-          0,
-          0
-        );
-        const end = new Date(next);
-        end.setHours(
-          Math.floor(cfg.endHour),
-          Math.round((cfg.endHour % 1) * 60),
-          59,
-          999
-        );
-        // If next day not in operating days, return null
-        const day = start.getDay();
-        if (!cfg.daysOfWeek.includes(day)) return null;
-        return { start, end };
-      };
-
       // Helper: build day-based windows for a center between selected from→to (local time)
       const getDailyWindows = (
         centerId: string,
@@ -744,11 +579,14 @@ export function Dashboard() {
           if (cfg.daysOfWeek.includes(day)) {
             const closeD = addHours(cursor, cfg.endHour);
             // Find next operating day (could be tomorrow, or Monday if today is Friday)
-            let nextOpDay = new Date(cursor);
+            const nextOpDay = new Date(cursor);
             nextOpDay.setDate(nextOpDay.getDate() + 1);
             let daysToAdd = 1;
             // Search up to 7 days ahead for next operating day
-            while (!cfg.daysOfWeek.includes(nextOpDay.getDay()) && daysToAdd < 7) {
+            while (
+              !cfg.daysOfWeek.includes(nextOpDay.getDay()) &&
+              daysToAdd < 7
+            ) {
               nextOpDay.setDate(nextOpDay.getDate() + 1);
               daysToAdd++;
             }
