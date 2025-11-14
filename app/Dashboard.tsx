@@ -100,7 +100,6 @@ import {
 } from "@/components/ui/select";
 import {
   RefreshCw,
-  TrendingUp,
   PhoneCall,
   Phone,
   LogOut,
@@ -424,6 +423,9 @@ export function Dashboard() {
       // Adjust end date to include the entire day (set to 23:59:59)
       const adjustedEndDate = new Date(endDate);
       adjustedEndDate.setHours(23, 59, 59, 999);
+      // For after-hours recovery (next-day in-hours), include next day in calls fetch
+      const callsEndDate = new Date(adjustedEndDate);
+      callsEndDate.setDate(callsEndDate.getDate() + 1);
 
       console.log(
         "Date Range:",
@@ -431,6 +433,7 @@ export function Dashboard() {
         "to",
         adjustedEndDate.toISOString()
       );
+      console.log("Calls fetch until:", callsEndDate.toISOString());
       console.log("Current Date:", new Date().toISOString());
       console.log("Fetching data from:", startDate.toISOString());
 
@@ -446,7 +449,7 @@ export function Dashboard() {
           .from("calls")
           .select("*")
           .gte("created_at", startDate.toISOString())
-          .lte("created_at", adjustedEndDate.toISOString())
+          .lte("created_at", callsEndDate.toISOString())
           .order("created_at", { ascending: false })
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -736,17 +739,24 @@ export function Dashboard() {
             const end = addHours(cursor, cfg.endHour);
             result.inHours.push({ start, end });
           }
-          // after-hours window for this day = close(D) → open(D+1) if next day in operating days
-          const closeD = addHours(cursor, cfg.endHour);
-          const next = new Date(cursor);
-          next.setDate(next.getDate() + 1);
-          const nextDay = next.getDay();
-          if (
-            cfg.daysOfWeek.includes(day) &&
-            cfg.daysOfWeek.includes(nextDay)
-          ) {
-            const openNext = addHours(next, cfg.startHour);
-            result.afterHours.push({ start: closeD, end: openNext });
+          // after-hours window for this day = close(D) → open of NEXT operating day
+          // This handles Friday→Monday gaps for Mon-Fri centers
+          if (cfg.daysOfWeek.includes(day)) {
+            const closeD = addHours(cursor, cfg.endHour);
+            // Find next operating day (could be tomorrow, or Monday if today is Friday)
+            let nextOpDay = new Date(cursor);
+            nextOpDay.setDate(nextOpDay.getDate() + 1);
+            let daysToAdd = 1;
+            // Search up to 7 days ahead for next operating day
+            while (!cfg.daysOfWeek.includes(nextOpDay.getDay()) && daysToAdd < 7) {
+              nextOpDay.setDate(nextOpDay.getDate() + 1);
+              daysToAdd++;
+            }
+            // If we found a valid next operating day, create the after-hours window
+            if (cfg.daysOfWeek.includes(nextOpDay.getDay())) {
+              const openNext = addHours(nextOpDay, cfg.startHour);
+              result.afterHours.push({ start: closeD, end: openNext });
+            }
           }
           cursor.setDate(cursor.getDate() + 1);
         }
@@ -788,46 +798,37 @@ export function Dashboard() {
         allCentersFromCalls.add(call.centerId);
       });
 
-      // Process each call center to find after-hours SMS/DID callbacks (next-day in-hours)
+      // Process each call center to find after-hours SMS/DID callbacks (recovery calls during in-hours)
       allCentersFromCalls.forEach((centerId) => {
         if (!callKeysByCenterAfterHours[centerId]) {
           callKeysByCenterAfterHours[centerId] = new Set();
         }
 
-        // Get all after-hours leads for this center using same-day windowing
-        // Collect center leads in range
-        const centerLeads = (irevLeads || []).filter(
-          (lead) => (lead.utm_source || "").replace(/_/g, "") === centerId
+        // Get in-hours windows for this center
+        const windowsForCenter = getDailyWindows(
+          centerId,
+          startDate,
+          adjustedEndDate
         );
-        const centerLeadsAfterHours = centerLeads.filter((lead) => {
-          const res = classifyLeadWithLabel(
-            (lead.timestampz ?? lead.created_at) as string,
-            centerId
-          );
-          return res?.bucket === "after";
-        });
 
-        // For each after-hours lead, check if there's an SMS call during next-day in-hours
+        // Find ALL SMS/DID calls that occurred during in-hours windows
+        // These are "after-hours recovery" calls (callbacks from after-hours leads)
         const afterHoursCallKeys = new Set<string>();
-        centerLeadsAfterHours.forEach((l) => {
-          const key = getLeadKey(l);
-          if (!key) return;
 
-          const leadDate = new Date((l.timestampz ?? l.created_at) as string);
-          const nextDayWindow = getNextDayInHoursWindow(leadDate, centerId);
-          if (!nextDayWindow) return;
+        allCallsMetadata.forEach((call) => {
+          // Only process calls for this center
+          if (call.centerId !== centerId) return;
 
-          // Find SMS calls for this center during next-day in-hours window
-          const smsCallsInWindow = allCallsMetadata.filter(
-            (call) =>
-              (call.isSMS || call.isOnDid) &&
-              call.key === key &&
-              call.date >= nextDayWindow.start &&
-              call.date <= nextDayWindow.end
+          // Only SMS or DID calls count as after-hours recovery
+          if (!call.isSMS && !call.isOnDid) return;
+
+          // Check if call occurred during in-hours window
+          const isInHoursWindow = windowsForCenter.inHours.some(
+            (w) => call.date >= w.start && call.date < w.end
           );
 
-          if (smsCallsInWindow.length > 0) {
-            afterHoursCallKeys.add(key);
+          if (isInHoursWindow) {
+            afterHoursCallKeys.add(call.key);
           }
         });
 
@@ -840,22 +841,26 @@ export function Dashboard() {
         }
       });
 
-      // Now process leads by center for lead counts (same-day windowing)
+      // Now process leads by center for lead counts (using consistent window-based approach)
       Object.keys(leadsByCenter).forEach((centerId) => {
         const leads = leadsByCenter[centerId];
+        const windowsForCenter = getDailyWindows(
+          centerId,
+          startDate,
+          adjustedEndDate
+        );
+
         const leadsInHours = leads.filter((l) => {
-          const res = classifyLeadWithLabel(
-            (l.timestampz ?? l.created_at) as string,
-            centerId
+          const d = new Date((l.timestampz ?? l.created_at) as string);
+          return windowsForCenter.inHours.some(
+            (w) => d >= w.start && d < w.end
           );
-          return res?.bucket === "in";
         });
         const leadsAfterHours = leads.filter((l) => {
-          const res = classifyLeadWithLabel(
-            (l.timestampz ?? l.created_at) as string,
-            centerId
+          const d = new Date((l.timestampz ?? l.created_at) as string);
+          return windowsForCenter.afterHours.some(
+            (w) => d >= w.start && d < w.end
           );
-          return res?.bucket === "after";
         });
 
         totalLeadsInHoursAll += leadsInHours.length;
@@ -1342,7 +1347,7 @@ export function Dashboard() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-3">
             <Card className="bg-linear-to-br from-white to-cyan-50 border-cyan-200 hover:border-cyan-400 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-200/50 shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
@@ -1433,39 +1438,7 @@ export function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-linear-to-br from-white to-orange-50 border-orange-200 hover:border-orange-400 transition-all duration-300 hover:shadow-lg hover:shadow-orange-200/50 shadow-md">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                  Callbacks
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-3.5 w-3.5 text-slate-500 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">
-                        Calls from the same phone number within 48 hours during
-                        business hours after an initial after-hours call. Rate
-                        shows the percentage of after-hours leads that
-                        successfully called back.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </CardTitle>
-                <div className="p-2 bg-orange-100 rounded-lg">
-                  <TrendingUp className="h-5 w-5 text-orange-600" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-slate-900">
-                  {stats?.totalCallbacks || 0}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  {stats?.totalAfterHours
-                    ? `${stats.callbackRate.toFixed(1)}% callback rate`
-                    : "No after-hours calls yet"}
-                </p>
-              </CardContent>
-            </Card>
+            {/* Callbacks card removed per requirement: after-hours and recovery are the same */}
           </div>
 
           {/* Table Section */}
