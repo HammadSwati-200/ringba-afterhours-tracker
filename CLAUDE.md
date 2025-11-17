@@ -154,11 +154,12 @@ Dashboard supports JSON and CSV exports of filtered data. Implementation in `Das
 
 ## Common Pitfalls
 
-- **Time zones**: Be aware that `isAfterHours()` uses client timezone. May not match PST/MST for users in other zones.
-- **SMS detection**: Relies on substring match of "SMS" in `publisher_name`. Case-insensitive (fixed).
+- **Time zones**: Now uses `date-fns-tz` for proper timezone conversion (PST/MST). Browser timezone no longer affects classification.
+- **SMS detection**: Checks for: SMS, Text, TXT, Message, Messaging (case-insensitive).
 - **Missing fields**: `CC_Number` and `publisher_name` may be null/undefined. Handle gracefully.
 - **Call center hours**: Some centers have no configured hours - this is intentional (treated as always in-hours).
 - **Lead totals**: In-hours + After-hours should now equal total leads. If not, check window logic.
+- **DST transitions**: The system uses IANA timezones which handle DST automatically. On DST transition days (e.g., March 10 spring forward, November 3 fall back), times will shift correctly. No special handling needed.
 
 ## File Organization
 

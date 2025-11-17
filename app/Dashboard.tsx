@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase-client";
 import {
   isAfterHours,
@@ -15,8 +15,7 @@ interface CallRow {
   created_at?: string;
   call_date?: string;
   caller_phone?: string;
-  click_id?: string;
-  clickId?: string;
+  click_id?: string; // Primary click ID field (snake_case matches DB convention)
   CC_Number?: string;
   publisher_name?: string;
 }
@@ -26,8 +25,7 @@ interface LeadRow {
   timestampz?: string;
   created_at?: string;
   cid?: string;
-  click_id?: string;
-  clickId?: string;
+  click_id?: string; // Primary click ID field (snake_case matches DB convention)
   phone_number_norm?: string;
   phone_number?: string;
 }
@@ -149,6 +147,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [debugMode, setDebugMode] = useState<boolean>(false);
+  const isMountedRef = useRef(true);
   const [debugData, setDebugData] = useState<Record<string, unknown> | null>(
     null
   );
@@ -168,6 +167,13 @@ export function Dashboard() {
   const [activeFilter, setActiveFilter] = useState<string>("last7Days");
   const router = useRouter();
   const supabase = createClient();
+
+  // Cleanup on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Helpers to handle dates in local time (avoid UTC off-by-one)
   const formatLocalDate = (d: Date) => {
@@ -284,11 +290,19 @@ export function Dashboard() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    const cancelled = false;
+
+    let cancelled = false;
+
     (async () => {
-      await loadStats();
-      if (cancelled) return;
+      if (!cancelled) {
+        await loadStats();
+      }
     })();
+
+    // Cleanup function to prevent state updates after unmount
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange, selectedCallCenter, isAuthenticated]);
 
@@ -309,22 +323,46 @@ export function Dashboard() {
       const startDate = dateRange.from;
       const endDate = dateRange.to;
 
-      // Adjust end date to include the entire day (set to 23:59:59)
-      const adjustedEndDate = new Date(endDate);
-      adjustedEndDate.setHours(23, 59, 59, 999);
+      // Create UTC dates to avoid timezone shift bugs
+      // Start of day in UTC: YYYY-MM-DD 00:00:00 UTC
+      const startDateUTC = new Date(
+        Date.UTC(
+          startDate.getFullYear(),
+          startDate.getMonth(),
+          startDate.getDate(),
+          0,
+          0,
+          0,
+          0
+        )
+      );
+
+      // End of day in UTC: YYYY-MM-DD 23:59:59 UTC
+      const adjustedEndDate = new Date(
+        Date.UTC(
+          endDate.getFullYear(),
+          endDate.getMonth(),
+          endDate.getDate(),
+          23,
+          59,
+          59,
+          999
+        )
+      );
+
       // For after-hours recovery (next-day in-hours), include next day in calls fetch
       const callsEndDate = new Date(adjustedEndDate);
-      callsEndDate.setDate(callsEndDate.getDate() + 1);
+      callsEndDate.setUTCDate(callsEndDate.getUTCDate() + 1);
 
       console.log(
         "Date Range:",
-        startDate.toISOString(),
+        startDateUTC.toISOString(),
         "to",
         adjustedEndDate.toISOString()
       );
       console.log("Calls fetch until:", callsEndDate.toISOString());
       console.log("Current Date:", new Date().toISOString());
-      console.log("Fetching data from:", startDate.toISOString());
+      console.log("Fetching data from:", startDateUTC.toISOString());
 
       // Fetch calls from Ringba - fetch all records
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -337,7 +375,7 @@ export function Dashboard() {
         const { data: callsPage, error: fetchError } = await supabase
           .from("calls")
           .select("*")
-          .gte("created_at", startDate.toISOString())
+          .gte("created_at", startDateUTC.toISOString())
           .lte("created_at", callsEndDate.toISOString())
           .order("created_at", { ascending: false })
           .range(page * pageSize, (page + 1) * pageSize - 1);
@@ -349,8 +387,11 @@ export function Dashboard() {
 
         if (callsPage && callsPage.length > 0) {
           allCalls = [...allCalls, ...callsPage];
+          // Only continue if we got a full page (indicates there might be more)
           hasMore = callsPage.length === pageSize;
-          page++;
+          if (hasMore) {
+            page++;
+          }
         } else {
           hasMore = false;
         }
@@ -368,7 +409,7 @@ export function Dashboard() {
         const { data: irevLeadsPage, error: irevError } = await supabase
           .from("irev_leads")
           .select("*")
-          .gte("timestampz", startDate.toISOString())
+          .gte("timestampz", startDateUTC.toISOString())
           .lte("timestampz", adjustedEndDate.toISOString())
           .order("timestampz", { ascending: false })
           .range(irevPage * pageSize, (irevPage + 1) * pageSize - 1);
@@ -380,8 +421,11 @@ export function Dashboard() {
 
         if (irevLeadsPage && irevLeadsPage.length > 0) {
           allIrevLeads = [...allIrevLeads, ...irevLeadsPage];
+          // Only continue if we got a full page (indicates there might be more)
           hasMoreIrev = irevLeadsPage.length === pageSize;
-          irevPage++;
+          if (hasMoreIrev) {
+            irevPage++;
+          }
         } else {
           hasMoreIrev = false;
         }
@@ -445,9 +489,16 @@ export function Dashboard() {
           : digits;
       };
 
-      // Helper: prefer click_id for matching; fallback to normalized phone
+      // Helper: Use phone as primary key for consistency
+      // Phone number is more stable than click_id across different data sources
+      // This prevents same person being counted multiple times with different keys
       const getCallKey = (c: CallRow): string | null => {
-        return c?.click_id || c?.clickId || normalizePhone(c?.caller_phone);
+        const phone = normalizePhone(c?.caller_phone);
+        const clickId = c?.click_id;
+
+        // Prefer phone if available (most stable identifier)
+        // Fall back to click_id only if no phone
+        return phone || clickId || null;
       };
 
       // NEW LOGIC per client feedback:
@@ -478,8 +529,12 @@ export function Dashboard() {
           (call.created_at ?? call.call_date) as string
         );
 
-        // Determine if SMS by publisher, and whether the call landed on a known DID
-        const isSMS = /sms/i.test(call.publisher_name || "");
+        // Determine if SMS by publisher (check multiple SMS-related keywords)
+        // Check for: SMS, Text, Texting, Message, Messaging, TXT
+        const publisherName = call.publisher_name || "";
+        const isSMS = /sms|text|txt|messag/i.test(publisherName);
+
+        // Also check if the call landed on a known DID
         const isOnDid = ((): boolean => {
           const did = normalizeDid(call.CC_Number);
           return !!(did && ALL_DIDS.includes(did));
@@ -568,17 +623,14 @@ export function Dashboard() {
         endDay.setHours(0, 0, 0, 0);
         while (cursor <= endDay) {
           const day = cursor.getDay();
-          // in-hours window for this day
+          // in-hours window for this day (only if day is operating)
           if (cfg.daysOfWeek.includes(day)) {
             const start = addHours(cursor, cfg.startHour);
             const end = addHours(cursor, cfg.endHour);
             result.inHours.push({ start, end });
-          }
-          // after-hours window for this day = close(D) → open of NEXT operating day
-          // This handles Friday→Monday gaps for Mon-Fri centers
-          if (cfg.daysOfWeek.includes(day)) {
+
+            // after-hours window from close of this day to open of next operating day
             const closeD = addHours(cursor, cfg.endHour);
-            // Find next operating day (could be tomorrow, or Monday if today is Friday)
             const nextOpDay = new Date(cursor);
             nextOpDay.setDate(nextOpDay.getDate() + 1);
             let daysToAdd = 1;
@@ -594,6 +646,26 @@ export function Dashboard() {
             if (cfg.daysOfWeek.includes(nextOpDay.getDay())) {
               const openNext = addHours(nextOpDay, cfg.startHour);
               result.afterHours.push({ start: closeD, end: openNext });
+            }
+          } else {
+            // Non-operating day: create after-hours window from midnight to next open
+            // This captures Sunday 12am → Monday 8am for Mon-Sat centers
+            const startOfDay = addHours(cursor, 0); // midnight
+            const nextOpDay = new Date(cursor);
+            nextOpDay.setDate(nextOpDay.getDate() + 1);
+            let daysToAdd = 1;
+            // Find next operating day
+            while (
+              !cfg.daysOfWeek.includes(nextOpDay.getDay()) &&
+              daysToAdd < 7
+            ) {
+              nextOpDay.setDate(nextOpDay.getDate() + 1);
+              daysToAdd++;
+            }
+            // If we found a valid next operating day, create the after-hours window
+            if (cfg.daysOfWeek.includes(nextOpDay.getDay())) {
+              const openNext = addHours(nextOpDay, cfg.startHour);
+              result.afterHours.push({ start: startOfDay, end: openNext });
             }
           }
           cursor.setDate(cursor.getDate() + 1);
@@ -645,7 +717,7 @@ export function Dashboard() {
         // Get in-hours windows for this center
         const windowsForCenter = getDailyWindows(
           centerId,
-          startDate,
+          startDateUTC,
           adjustedEndDate
         );
 
@@ -684,7 +756,7 @@ export function Dashboard() {
         const leads = leadsByCenter[centerId];
         const windowsForCenter = getDailyWindows(
           centerId,
-          startDate,
+          startDateUTC,
           adjustedEndDate
         );
 
@@ -775,7 +847,7 @@ export function Dashboard() {
         const totalLeadsSent = centerLeads.length;
         const windowsForCenter = getDailyWindows(
           centerId,
-          startDate,
+          startDateUTC,
           adjustedEndDate
         );
         const centerLeadsInHours = centerLeads.filter((lead) => {
@@ -808,18 +880,18 @@ export function Dashboard() {
         const totalUniqueCallsAfterHours = callKeysAfter.size;
 
         // Call rate in hours (unique calls / leads sent in hours)
-        // Note: Not capped at 100% per client request - can exceed if more calls than leads
+        // Note: Not capped at 100% - can exceed if more calls than leads (data quality issue indicator)
         const callRateInHours =
           totalLeadsSentInHours > 0
             ? (totalUniqueCallsInHours / totalLeadsSentInHours) * 100
             : 0;
 
         // Call rate after hours (unique calls / leads sent after hours)
-        let callRateAfterHours =
+        // Note: Not capped at 100% - consistent with in-hours rate calculation
+        const callRateAfterHours =
           totalLeadsSentAfterHours > 0
             ? (totalUniqueCallsAfterHours / totalLeadsSentAfterHours) * 100
             : 0;
-        callRateAfterHours = Math.min(callRateAfterHours, 100);
 
         // Total calls missed after hours
         // This is leads sent after hours minus unique calls made after hours
@@ -875,18 +947,21 @@ export function Dashboard() {
         return partsA.suffix.localeCompare(partsB.suffix);
       });
 
-      setStats({
-        totalCalls: calls.length,
-        totalInHours: totalLeadsInHoursAll,
-        totalAfterHours: totalLeadsAfterHoursAll,
-        totalCallbacks: callbackCount,
-        callbackRate:
-          totalLeadsAfterHoursAll > 0
-            ? (callbackCount / totalLeadsAfterHoursAll) * 100
-            : 0,
-        byCallCenter,
-        callCenterStats,
-      });
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setStats({
+          totalCalls: calls.length,
+          totalInHours: totalLeadsInHoursAll,
+          totalAfterHours: totalLeadsAfterHoursAll,
+          totalCallbacks: callbackCount,
+          callbackRate:
+            totalLeadsAfterHoursAll > 0
+              ? (callbackCount / totalLeadsAfterHoursAll) * 100
+              : 0,
+          byCallCenter,
+          callCenterStats,
+        });
+      }
 
       // Prepare debug summary for verification against DB
       const leadsInHoursCounts: Record<string, number> = {};
@@ -916,24 +991,33 @@ export function Dashboard() {
         ])
       );
 
-      setDebugData({
-        dateRange: {
-          start: startDate.toISOString(),
-          end: adjustedEndDate.toISOString(),
-        },
-        leadsInHoursCounts,
-        leadsAfterHoursCounts,
-        callKeysInHoursCounts: callKeysInCounts,
-        callKeysAfterHoursCounts: callKeysAfterCounts,
-        callbacksByCenter,
-      });
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setDebugData({
+          dateRange: {
+            start: startDate.toISOString(),
+            end: adjustedEndDate.toISOString(),
+          },
+          leadsInHoursCounts,
+          leadsAfterHoursCounts,
+          callKeysInHoursCounts: callKeysInCounts,
+          callKeysAfterHoursCounts: callKeysAfterCounts,
+          callbacksByCenter,
+        });
+      }
     } catch (err: unknown) {
       console.error("Error loading stats:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to load statistics"
-      );
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setError(
+          err instanceof Error ? err.message : "Failed to load statistics"
+        );
+      }
     } finally {
-      setLoading(false);
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }
 
@@ -990,10 +1074,20 @@ export function Dashboard() {
         center.totalCallMissedAfterHours,
       ]);
 
+      // Helper to escape CSV cells (handles quotes and commas)
+      const escapeCsvCell = (cell: string | number): string => {
+        const str = String(cell);
+        // If cell contains quotes, commas, or newlines, wrap in quotes and escape internal quotes
+        if (str.includes('"') || str.includes(",") || str.includes("\n")) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
       // Combine headers and rows
       const csvContent = [
-        headers.join(","),
-        ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
+        headers.map(escapeCsvCell).join(","),
+        ...rows.map((row) => row.map(escapeCsvCell).join(",")),
       ].join("\n");
 
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -1008,6 +1102,15 @@ export function Dashboard() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     }
+  }
+
+  // If not authenticated, avoid flashing the dashboard while redirecting
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-slate-600">Redirecting to login...</p>
+      </div>
+    );
   }
 
   if (error) {
@@ -1128,7 +1231,12 @@ export function Dashboard() {
                 {debugMode && (
                   <DropdownMenuItem
                     onClick={() => {
-                      if (!debugData) return;
+                      if (!debugData) {
+                        alert(
+                          "No debug data available. Please load data first by selecting a date range."
+                        );
+                        return;
+                      }
                       const blob = new Blob(
                         [JSON.stringify(debugData, null, 2)],
                         {
@@ -1514,14 +1622,22 @@ export function Dashboard() {
                               <TableCell className="text-center px-6">
                                 <span
                                   className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                    centerStat.callRateInHours >= 50
+                                    centerStat.totalLeadsSentInHours === 0 &&
+                                    centerStat.totalUniqueCallsInHours > 0
+                                      ? "bg-blue-100 text-blue-700 border border-blue-300"
+                                      : centerStat.callRateInHours >= 50
                                       ? "bg-green-100 text-green-700 border border-green-300"
                                       : centerStat.callRateInHours >= 25
                                       ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
                                       : "bg-red-100 text-red-700 border border-red-300"
                                   }`}
                                 >
-                                  {centerStat.callRateInHours.toFixed(1)}%
+                                  {centerStat.totalLeadsSentInHours === 0 &&
+                                  centerStat.totalUniqueCallsInHours > 0
+                                    ? "N/A (no leads)"
+                                    : `${centerStat.callRateInHours.toFixed(
+                                        1
+                                      )}%`}
                                 </span>
                               </TableCell>
                               <TableCell className="text-center text-purple-600 font-semibold px-6">
@@ -1533,14 +1649,22 @@ export function Dashboard() {
                               <TableCell className="text-center px-6">
                                 <span
                                   className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                    centerStat.callRateAfterHours >= 50
+                                    centerStat.totalLeadsSentAfterHours === 0 &&
+                                    centerStat.totalUniqueCallsAfterHours > 0
+                                      ? "bg-blue-100 text-blue-700 border border-blue-300"
+                                      : centerStat.callRateAfterHours >= 50
                                       ? "bg-green-100 text-green-700 border border-green-300"
                                       : centerStat.callRateAfterHours >= 25
                                       ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
                                       : "bg-red-100 text-red-700 border border-red-300"
                                   }`}
                                 >
-                                  {centerStat.callRateAfterHours.toFixed(1)}%
+                                  {centerStat.totalLeadsSentAfterHours === 0 &&
+                                  centerStat.totalUniqueCallsAfterHours > 0
+                                    ? "N/A (no leads)"
+                                    : `${centerStat.callRateAfterHours.toFixed(
+                                        1
+                                      )}%`}
                                 </span>
                               </TableCell>
                               <TableCell className="text-center text-red-600 font-semibold px-6">

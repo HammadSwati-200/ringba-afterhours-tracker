@@ -1,6 +1,8 @@
 // Call center operating hours configuration
 // Times are in PST/MST as specified
 
+import { toZonedTime } from "date-fns-tz";
+
 export interface CallCenterHours {
   id: string;
   name: string;
@@ -34,25 +36,29 @@ export const callCenterHours: CallCenterHours[] = [
     id: "CC3",
     name: "CC3",
     did: "18334310623",
-    // No operating hours configured
+    // No operating hours configured - treated as 24/7 (always in-hours)
+    // TODO: Add operating hours if this center has specific hours
   },
   {
     id: "CC4",
     name: "CC4",
     did: "18334410032",
-    // No operating hours configured
+    // No operating hours configured - treated as 24/7 (always in-hours)
+    // TODO: Add operating hours if this center has specific hours
   },
   {
     id: "CC5",
     name: "CC5",
     did: "18334310301",
-    // No operating hours configured
+    // No operating hours configured - treated as 24/7 (always in-hours)
+    // TODO: Add operating hours if this center has specific hours
   },
   {
     id: "CC6",
     name: "CC6",
     did: "18334320783",
-    // No operating hours configured
+    // No operating hours configured - treated as 24/7 (always in-hours)
+    // TODO: Add operating hours if this center has specific hours
   },
   {
     id: "CC7",
@@ -67,7 +73,8 @@ export const callCenterHours: CallCenterHours[] = [
     id: "CC8",
     name: "CC8",
     did: "18334411630",
-    // No operating hours configured
+    // No operating hours configured - treated as 24/7 (always in-hours)
+    // TODO: Add operating hours if this center has specific hours
   },
   {
     id: "CC9",
@@ -86,6 +93,13 @@ export const callCenterHours: CallCenterHours[] = [
     endHour: 17, // 5pm
     timezone: "PST",
     daysOfWeek: [1, 2, 3, 4, 5], // Mon-Fri
+  },
+  {
+    id: "CC11",
+    name: "CC11",
+    // No DID or operating hours configured
+    // Note: CC11 appears to be inactive or not in use
+    // Add configuration here if CC11 becomes active
   },
   {
     id: "CC12",
@@ -117,6 +131,8 @@ export const callCenterHours: CallCenterHours[] = [
   {
     id: "CC14A",
     name: "CC14A",
+    // TODO: Add DID number for CC14A for callback detection
+    // DID-based after-hours detection will not work without this
     startHour: 8,
     endHour: 18, // 6pm
     timezone: "PST",
@@ -188,6 +204,8 @@ export const callCenterHours: CallCenterHours[] = [
   {
     id: "CC18A",
     name: "CC18A",
+    // TODO: Add DID number for CC18A for callback detection
+    // DID-based after-hours detection will not work without this
     startHour: 8.5, // 8:30am
     endHour: 16, // 4pm
     timezone: "PST",
@@ -196,6 +214,8 @@ export const callCenterHours: CallCenterHours[] = [
   {
     id: "CC18B",
     name: "CC18B",
+    // TODO: Add DID number for CC18B for callback detection
+    // DID-based after-hours detection will not work without this
     startHour: 8.5, // 8:30am
     endHour: 16, // 4pm
     timezone: "PST",
@@ -277,7 +297,8 @@ export const callCenterHours: CallCenterHours[] = [
     id: "CX",
     name: "CX",
     did: "18334412617",
-    // No operating hours configured
+    // No operating hours configured - treated as 24/7 (always in-hours)
+    // TODO: Add operating hours if this center has specific hours
   },
 ];
 
@@ -299,9 +320,15 @@ export function isAfterHours(callDate: Date, callCenterId: string): boolean {
     return false;
   }
 
-  // Convert call date to appropriate timezone
-  // Note: In production, use a proper timezone library like date-fns-tz
-  const callDateInTimezone = new Date(callDate);
+  // Convert call date to appropriate timezone (PST or MST)
+  const timezoneMap: { [key: string]: string } = {
+    PST: "America/Los_Angeles",
+    MST: "America/Denver",
+  };
+  const ianaTimezone = timezoneMap[config.timezone || "PST"] || "America/Los_Angeles";
+
+  // Convert UTC timestamp to call center's local time
+  const callDateInTimezone = toZonedTime(callDate, ianaTimezone);
 
   const dayOfWeek = callDateInTimezone.getDay();
   const hour =
