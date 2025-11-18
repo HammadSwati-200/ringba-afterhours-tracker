@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import {
   Card,
   CardContent,
@@ -44,61 +44,112 @@ import {
   TrendingUp,
   Info,
   LogOut,
+  AlertCircle,
 } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
-
-// Placeholder data structure
-interface CallCenterStats {
-  name: string;
-  totalCalls: number;
-  inHoursLeads: number;
-  afterHoursLeads: number;
-  callbackRate: string;
-}
+import { useCallCenterMetrics } from "@/lib/hooks/useCallCenterMetrics";
+import { useDateRange } from "@/lib/hooks/useDateRange";
+import { exportAsJSON, exportAsCSV } from "@/lib/services/export.service";
+import { formatPercentage, formatNumber } from "@/lib/utils/calculations";
+import { callCenterHours } from "@/lib/call-center-hours";
 
 export function Dashboard() {
-  const [loading, setLoading] = useState(false);
-  const [dateRange, setDateRange] = useState<{ start: Date; end: Date } | null>(null);
+  const { metrics, loading, error, fetchMetrics } = useCallCenterMetrics();
+  const { dateRange, updateDateRange } = useDateRange();
   const [selectedCallCenter, setSelectedCallCenter] = useState<string>("all");
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
 
-  // Placeholder stats - replace with real data
-  const stats = {
-    totalCalls: 0,
-    inHoursLeads: 0,
-    afterHoursLeads: 0,
-  };
+  // Fetch data on mount and when date range changes
+  useEffect(() => {
+    fetchMetrics(dateRange);
+  }, [dateRange, fetchMetrics]);
 
-  // Placeholder call center data - replace with real data
-  const callCenterStats: CallCenterStats[] = [];
+  // Filter metrics based on selected call center
+  const filteredMetrics = useMemo(() => {
+    if (!metrics) return null;
+    if (selectedCallCenter === "all") return metrics;
 
-  const handleDateRangeChange = (start: Date | null, end: Date | null) => {
-    if (start && end) {
-      setDateRange({ start, end });
-      // TODO: Fetch data based on new date range
-    }
-  };
+    const filtered = metrics.byCallCenter.filter(
+      (cc) => cc.callCenter === selectedCallCenter
+    );
 
-  const handleRefresh = () => {
-    setLoading(true);
-    // TODO: Implement data refresh logic
-    setTimeout(() => setLoading(false), 1000);
-  };
+    return {
+      ...metrics,
+      byCallCenter: filtered,
+      totalInHoursLeads: filtered.reduce((sum, cc) => sum + cc.inHours.totalLeads, 0),
+      totalAfterHoursLeads: filtered.reduce((sum, cc) => sum + cc.afterHours.totalLeads, 0),
+      totalCallbacks: filtered.reduce((sum, cc) => sum + cc.afterHours.callbacks, 0),
+      overallCallbackRate:
+        filtered.reduce((sum, cc) => sum + cc.afterHours.totalLeads, 0) > 0
+          ? (filtered.reduce((sum, cc) => sum + cc.afterHours.callbacks, 0) /
+              filtered.reduce((sum, cc) => sum + cc.afterHours.totalLeads, 0)) *
+            100
+          : 0,
+    };
+  }, [metrics, selectedCallCenter]);
 
-  const handleExport = (format: "json" | "csv") => {
-    // TODO: Implement export logic
-    console.log(`Exporting as ${format}`);
-  };
+  // Get unique call centers for dropdown
+  const callCenters = useMemo(() => {
+    return callCenterHours.map((cc) => ({
+      id: cc.id.replace(/_/g, ""),
+      name: cc.name.replace(/_/g, ""),
+    }));
+  }, []);
 
-  const handleLogout = () => {
-    // TODO: Implement logout logic
+  const handleDateRangeChange = useCallback(
+    (start: Date | null, end: Date | null) => {
+      if (start && end) {
+        updateDateRange(start, end);
+      }
+    },
+    [updateDateRange]
+  );
+
+  const handleRefresh = useCallback(() => {
+    fetchMetrics(dateRange);
+  }, [dateRange, fetchMetrics]);
+
+  const handleExport = useCallback(
+    (format: "json" | "csv") => {
+      if (!filteredMetrics) return;
+
+      const timestamp = new Date().toISOString().split("T")[0];
+      const filename = `ringba-metrics-${timestamp}`;
+
+      if (format === "json") {
+        exportAsJSON(filteredMetrics, `${filename}.json`);
+      } else {
+        exportAsCSV(filteredMetrics, `${filename}.csv`);
+      }
+    },
+    [filteredMetrics]
+  );
+
+  const handleLogout = useCallback(() => {
     window.location.href = "/login";
-  };
+  }, []);
+
+  // Stats for display
+  const stats = useMemo(() => {
+    if (!filteredMetrics) {
+      return {
+        totalCalls: 0,
+        inHoursLeads: 0,
+        afterHoursLeads: 0,
+      };
+    }
+
+    return {
+      totalCalls: filteredMetrics.totalInHoursLeads + filteredMetrics.totalAfterHoursLeads,
+      inHoursLeads: filteredMetrics.totalInHoursLeads,
+      afterHoursLeads: filteredMetrics.totalAfterHoursLeads,
+    };
+  }, [filteredMetrics]);
 
   return (
     <TooltipProvider>
       <div className="min-h-screen">
-        <div className="max-w-[2000px] mx-auto space-y-6">
+        <div className="max-w-[2000px] mx-auto space-y-6 px-4 sm:px-6 lg:px-8 py-6">
           {/* Header */}
           <div className="flex items-start justify-between flex-wrap gap-4">
             <div>
@@ -119,6 +170,29 @@ export function Dashboard() {
             </Button>
           </div>
 
+          {/* Error Message */}
+          {error && (
+            <Card className="border-red-200 bg-red-50">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+                  <div>
+                    <h3 className="font-semibold text-red-900">Error loading data</h3>
+                    <p className="text-red-700 text-sm mt-1">{error.message}</p>
+                    <Button
+                      onClick={handleRefresh}
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 border-red-300 text-red-700 hover:bg-red-100"
+                    >
+                      Try Again
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Filters and Controls */}
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between flex-wrap bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center flex-wrap flex-1">
@@ -133,7 +207,11 @@ export function Dashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Call Centers</SelectItem>
-                  {/* TODO: Add call center options */}
+                  {callCenters.map((cc) => (
+                    <SelectItem key={cc.id} value={cc.name}>
+                      {cc.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
 
@@ -157,13 +235,20 @@ export function Dashboard() {
                 disabled={loading}
                 className="flex-1 sm:flex-none"
               >
-                <RefreshCw className={`mr-2 w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                <RefreshCw
+                  className={`mr-2 w-4 h-4 ${loading ? "animate-spin" : ""}`}
+                />
                 Refresh
               </Button>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="flex-1 sm:flex-none">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 sm:flex-none"
+                    disabled={!filteredMetrics}
+                  >
                     <Download className="mr-2 w-4 h-4" />
                     Export
                   </Button>
@@ -185,13 +270,13 @@ export function Dashboard() {
             <Card className="bg-gradient-to-br from-white to-cyan-50 border-cyan-200 hover:border-cyan-400 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-200/50 shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                  Total Calls
+                  Total Leads
                   <Tooltip>
                     <TooltipTrigger>
                       <Info className="w-4 h-4 text-slate-400" />
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Total number of calls in the selected date range</p>
+                      <p>Total number of leads in the selected date range</p>
                     </TooltipContent>
                   </Tooltip>
                 </CardTitle>
@@ -199,7 +284,7 @@ export function Dashboard() {
               </CardHeader>
               <CardContent>
                 <p className="text-3xl font-bold text-cyan-700">
-                  {stats.totalCalls.toLocaleString()}
+                  {formatNumber(stats.totalCalls)}
                 </p>
               </CardContent>
             </Card>
@@ -221,7 +306,7 @@ export function Dashboard() {
               </CardHeader>
               <CardContent>
                 <p className="text-3xl font-bold text-emerald-700">
-                  {stats.inHoursLeads.toLocaleString()}
+                  {formatNumber(stats.inHoursLeads)}
                 </p>
               </CardContent>
             </Card>
@@ -243,7 +328,7 @@ export function Dashboard() {
               </CardHeader>
               <CardContent>
                 <p className="text-3xl font-bold text-purple-700">
-                  {stats.afterHoursLeads.toLocaleString()}
+                  {formatNumber(stats.afterHoursLeads)}
                 </p>
               </CardContent>
             </Card>
@@ -260,7 +345,12 @@ export function Dashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {callCenterStats.length === 0 ? (
+              {loading ? (
+                <div className="text-center py-12">
+                  <RefreshCw className="w-8 h-8 text-slate-400 animate-spin mx-auto" />
+                  <p className="text-slate-500 text-lg mt-4">Loading data...</p>
+                </div>
+              ) : !filteredMetrics || filteredMetrics.byCallCenter.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-slate-500 text-lg">
                     No data available for the selected date range.
@@ -278,39 +368,55 @@ export function Dashboard() {
                           Call Center
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-right">
-                          Total Calls
+                          <div>Total Leads</div>
+                          <div className="text-xs font-normal text-slate-500">(In-Hours)</div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-right">
-                          In-Hours Leads
+                          <div>Unique Calls</div>
+                          <div className="text-xs font-normal text-slate-500">(In-Hours)</div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-right">
-                          After-Hours Leads
+                          <div>Call Rate %</div>
+                          <div className="text-xs font-normal text-slate-500">(In-Hours)</div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-right">
-                          Callback Rate
+                          <div>Total Leads</div>
+                          <div className="text-xs font-normal text-slate-500">(After-Hours)</div>
+                        </TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-right">
+                          Callbacks
+                        </TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-right">
+                          Callback Rate %
                         </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {callCenterStats.map((cc, idx) => (
+                      {filteredMetrics.byCallCenter.map((cc, idx) => (
                         <TableRow
                           key={idx}
                           className="hover:bg-slate-50 transition-colors"
                         >
                           <TableCell className="font-medium text-slate-900">
-                            {cc.name}
+                            {cc.callCenter}
                           </TableCell>
                           <TableCell className="text-right text-slate-700">
-                            {cc.totalCalls.toLocaleString()}
+                            {formatNumber(cc.inHours.totalLeads)}
                           </TableCell>
                           <TableCell className="text-right text-emerald-700 font-medium">
-                            {cc.inHoursLeads.toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right text-purple-700 font-medium">
-                            {cc.afterHoursLeads.toLocaleString()}
+                            {formatNumber(cc.inHours.uniqueCalls)}
                           </TableCell>
                           <TableCell className="text-right text-cyan-700 font-semibold">
-                            {cc.callbackRate}
+                            {formatPercentage(cc.inHours.callRate)}
+                          </TableCell>
+                          <TableCell className="text-right text-slate-700">
+                            {formatNumber(cc.afterHours.totalLeads)}
+                          </TableCell>
+                          <TableCell className="text-right text-purple-700 font-medium">
+                            {formatNumber(cc.afterHours.callbacks)}
+                          </TableCell>
+                          <TableCell className="text-right text-cyan-700 font-semibold">
+                            {formatPercentage(cc.afterHours.callbackRate)}
                           </TableCell>
                         </TableRow>
                       ))}
