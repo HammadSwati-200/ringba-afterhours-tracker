@@ -221,7 +221,7 @@ export function DateRangePicker({
             </Button>
             <Button
               size="sm"
-              className="bg-linear-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-medium"
+              className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-medium"
               onClick={handleConfirm}
             >
               Confirm

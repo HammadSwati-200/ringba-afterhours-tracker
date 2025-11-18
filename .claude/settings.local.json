@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(npm run build:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(npm run dev)",
+      "Bash(taskkill:*)",
+      "Bash(timeout:*)",
+      "Bash(ping:*)",
+      "Bash(nul)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfix: correct invalid Tailwind CSS gradient class names\n\nFixed all instances of bg-linear-to-* to bg-gradient-to-* across:\n- app/not-found.tsx (4 instances)\n- app/Dashboard.tsx (6 instances)  \n- app/login/page.tsx (4 instances)\n- app/page.tsx (1 instance)\n- components/date-range-picker.tsx (1 instance)\n\nThis resolves the Internal Server Error caused by invalid CSS classes.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(del:*)"
     ],
     "deny": [],
     "ask": []

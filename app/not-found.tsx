@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen relative flex items-center justify-center bg-linear-to-br from-white via-blue-50 to-purple-50 p-4">
+    <div className="min-h-screen relative flex items-center justify-center bg-gradient-to-br from-white via-blue-50 to-purple-50 p-4">
       {/* Animated background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -inset-2.5 opacity-25">
@@ -14,10 +14,10 @@ export default function NotFound() {
       </div>
 
       <div className="relative z-10 w-full max-w-2xl text-center bg-white/80 backdrop-blur-md rounded-2xl border border-slate-200 shadow-2xl p-8 md:p-12">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-purple-500 via-blue-500 to-cyan-500 text-white shadow-lg">
+        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 text-white shadow-lg">
           <span className="text-2xl font-bold">404</span>
         </div>
-        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight bg-linear-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
+        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
           Page not found
         </h1>
         <p className="mt-3 text-slate-600">
@@ -27,7 +27,7 @@ export default function NotFound() {
         <div className="mt-8 flex items-center justify-center gap-3">
           <Link
             href="/"
-            className="inline-flex items-center justify-center rounded-lg bg-linear-to-r from-purple-500 via-blue-500 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-[1.02]"
+            className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-[1.02]"
           >
             Go to Dashboard
           </Link>

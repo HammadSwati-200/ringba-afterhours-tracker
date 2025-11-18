@@ -1129,7 +1129,7 @@ export function Dashboard() {
           <CardContent>
             <Button
               onClick={() => loadStats()}
-              className="w-full bg-linear-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white shadow-md"
+              className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white shadow-md"
             >
               <RefreshCw className="mr-2 w-4 h-4" />
               Try Again
@@ -1158,7 +1158,7 @@ export function Dashboard() {
           {/* Header */}
           <div className="flex items-start justify-between flex-wrap gap-4">
             <div>
-              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight bg-linear-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
+              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
                 Ringba After-Hours Tracker
               </h1>
               <p className="text-slate-600 mt-2 text-lg">
@@ -1294,7 +1294,7 @@ export function Dashboard() {
 
           {/* Stats Cards */}
           <div className="grid gap-4 md:grid-cols-3">
-            <Card className="bg-linear-to-br from-white to-cyan-50 border-cyan-200 hover:border-cyan-400 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-200/50 shadow-md">
+            <Card className="bg-gradient-to-br from-white to-cyan-50 border-cyan-200 hover:border-cyan-400 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-200/50 shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
                   Total Calls
@@ -1324,7 +1324,7 @@ export function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-linear-to-br from-white to-emerald-50 border-emerald-200 hover:border-emerald-400 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-200/50 shadow-md">
+            <Card className="bg-gradient-to-br from-white to-emerald-50 border-emerald-200 hover:border-emerald-400 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-200/50 shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
                   In-Hours Leads
@@ -1354,7 +1354,7 @@ export function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-linear-to-br from-white to-purple-50 border-purple-200 hover:border-purple-400 transition-all duration-300 hover:shadow-lg hover:shadow-purple-200/50 shadow-md">
+            <Card className="bg-gradient-to-br from-white to-purple-50 border-purple-200 hover:border-purple-400 transition-all duration-300 hover:shadow-lg hover:shadow-purple-200/50 shadow-md">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
                   After-Hours Leads
@@ -1388,7 +1388,7 @@ export function Dashboard() {
           </div>
 
           {/* Table Section */}
-          <Card className="bg-linear-to-br from-white to-slate-50 border-slate-200 shadow-md hover:shadow-lg transition-shadow duration-300">
+          <Card className="bg-gradient-to-br from-white to-slate-50 border-slate-200 shadow-md hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
               <CardTitle className="text-slate-900">
                 Stats by Call Center

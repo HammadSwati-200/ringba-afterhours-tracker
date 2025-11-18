@@ -4,7 +4,7 @@ import { Dashboard } from "./Dashboard";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-linear-to-br from-white via-blue-50 to-purple-50">
+    <div className="min-h-screen bg-gradient-to-br from-white via-blue-50 to-purple-50">
       {/* Animated background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -inset-2.5 opacity-20">

@@ -73,7 +73,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-white via-blue-50 to-purple-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white via-blue-50 to-purple-50 p-4">
       {/* Animated background */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -inset-2.5 opacity-40">
@@ -86,10 +86,10 @@ export default function LoginPage() {
       {/* Login Card */}
       <Card className="w-full max-w-md relative z-10 shadow-2xl border-slate-200 bg-white/95 backdrop-blur-lg">
         <CardHeader className="space-y-3 pb-6">
-          <div className="mx-auto w-16 h-16 bg-linear-to-br from-purple-500 via-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg">
+          <div className="mx-auto w-16 h-16 bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg">
             <PhoneCall className="w-8 h-8 text-white" />
           </div>
-          <CardTitle className="text-3xl font-bold text-center bg-linear-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
+          <CardTitle className="text-3xl font-bold text-center bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
             Ringba After-Hours Tracker
           </CardTitle>
           <CardDescription className="text-center text-slate-600 text-base">
@@ -145,7 +145,7 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full bg-linear-to-r from-purple-500 via-blue-500 to-cyan-500 hover:from-purple-600 hover:via-blue-600 hover:to-cyan-600 text-white font-semibold py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]"
+              className="w-full bg-gradient-to-r from-purple-500 via-blue-500 to-cyan-500 hover:from-purple-600 hover:via-blue-600 hover:to-cyan-600 text-white font-semibold py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]"
               disabled={loading}
             >
               {loading ? (
