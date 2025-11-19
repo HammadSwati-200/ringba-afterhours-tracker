@@ -93,6 +93,9 @@ export function Dashboard() {
             if (!session) {
               setIsAuthenticated(false);
               router.push("/login");
+            } else {
+              setIsAuthenticated(true);
+              setAuthChecking(false);
             }
           }
         );

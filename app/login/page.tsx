@@ -32,7 +32,10 @@ export default function LoginPage() {
       }
       const { data: listener } = supabase.auth.onAuthStateChange(
         (_event, session) => {
-          if (session) router.push("/");
+          if (session) {
+            router.push("/");
+            router.refresh();
+          }
         }
       );
       unsub = () => listener.subscription.unsubscribe();
