@@ -305,27 +305,6 @@ export default function RingbaCallsPage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium text-slate-700">
-                  Call Center
-                </label>
-                <Select
-                  value={selectedCallCenter}
-                  onValueChange={setSelectedCallCenter}
-                >
-                  <SelectTrigger className="w-[180px] bg-white">
-                    <SelectValue placeholder="All Call Centers" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Call Centers</SelectItem>
-                    {callCenterHours.map((cc) => (
-                      <SelectItem key={cc.id} value={cc.id}>
-                        {cc.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
               <DateRangePicker
                 dateRange={dateRange}
                 onDateRangeChange={handleDateRangeChange}
@@ -334,7 +313,6 @@ export default function RingbaCallsPage() {
                 onClick={handleExportCSV}
                 disabled={loading || calls.length === 0}
                 variant="outline"
-                className="mt-auto"
               >
                 <Download className="mr-2 h-4 w-4" />
                 Export CSV
@@ -364,7 +342,11 @@ export default function RingbaCallsPage() {
                 columns={columns}
                 data={calls}
                 searchKey="call_center"
-                searchPlaceholder="Filter by call center..."
+                searchPlaceholder="Search in table..."
+                callCenterKey="call_center"
+                callCenters={callCenterHours}
+                onCallCenterChange={setSelectedCallCenter}
+                selectedCallCenter={selectedCallCenter}
               />
             )}
           </CardContent>
