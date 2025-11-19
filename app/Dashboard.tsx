@@ -53,13 +53,36 @@ import { useDateRange } from "@/lib/hooks/useDateRange";
 import { exportAsJSON, exportAsCSV } from "@/lib/services/export.service";
 import { formatPercentage, formatNumber } from "@/lib/utils/calculations";
 import { callCenterHours } from "@/lib/call-center-hours";
+import { createClient } from "@/lib/supabase-client";
 
 export function Dashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const supabase = createClient();
 
   const { metrics, loading, error, fetchMetrics } = useCallCenterMetrics();
   const { dateRange, updateDateRange } = useDateRange();
+
+  // Auth check - redirect to login if not authenticated
+  useEffect(() => {
+    let unsub: (() => void) | null = null;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
+        router.push("/login");
+        return;
+      }
+      const { data: listener } = supabase.auth.onAuthStateChange(
+        (_event, session) => {
+          if (!session) router.push("/login");
+        }
+      );
+      unsub = () => listener.subscription.unsubscribe();
+    })();
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [router, supabase.auth]);
 
   // Initialize state from URL parameters
   const [selectedCallCenter, setSelectedCallCenter] = useState<string>(
@@ -209,9 +232,16 @@ export function Dashboard() {
     [filteredMetrics]
   );
 
-  const handleLogout = useCallback(() => {
-    window.location.href = "/login";
-  }, []);
+  const handleLogout = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+      router.push("/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Force redirect even if signOut fails
+      router.push("/login");
+    }
+  }, [supabase.auth, router]);
 
   const handleClearFilters = useCallback(() => {
     setSelectedCallCenter("all");
@@ -538,24 +568,7 @@ export function Dashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredMetrics.byCallCenter.map((cc, idx) => {
-                        // Debug: Log CC1 data for verification
-                        if (cc.callCenter === "CC1") {
-                          console.log("🎯 CC1 Table Row Data:", {
-                            callCenter: cc.callCenter,
-                            operatingHours: cc.operatingHours,
-                            totalLeadsSent: cc.totalLeadsSent,
-                            totalCalls: cc.totalCalls,
-                            inHours_totalLeads: cc.inHours.totalLeads,
-                            inHours_uniqueCalls: cc.inHours.uniqueCalls,
-                            inHours_callRate: cc.inHours.callRate,
-                            afterHours_totalLeads: cc.afterHours.totalLeads,
-                            afterHours_callbacks: cc.afterHours.callbacks,
-                            afterHours_callbackRate: cc.afterHours.callbackRate,
-                            totalCallsMissedAfterHours: cc.totalCallsMissedAfterHours,
-                          });
-                        }
-                        return (
+                      {filteredMetrics.byCallCenter.map((cc, idx) => (
                         <TableRow
                           key={idx}
                           className="hover:bg-slate-50 transition-colors"
@@ -594,8 +607,7 @@ export function Dashboard() {
                             {formatNumber(cc.totalCallsMissedAfterHours)}
                           </TableCell>
                         </TableRow>
-                        );
-                      })}
+                      ))}
                     </TableBody>
                   </Table>
                 </div>
