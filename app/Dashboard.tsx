@@ -63,26 +63,54 @@ export function Dashboard() {
   const { metrics, loading, error, fetchMetrics } = useCallCenterMetrics();
   const { dateRange, updateDateRange } = useDateRange();
 
+  const [authChecking, setAuthChecking] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   // Auth check - redirect to login if not authenticated
   useEffect(() => {
     let unsub: (() => void) | null = null;
     (async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        router.push("/login");
-        return;
-      }
-      const { data: listener } = supabase.auth.onAuthStateChange(
-        (_event, session) => {
-          if (!session) router.push("/login");
+      try {
+        const { data, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError || !data.session) {
+          router.push("/login");
+          return;
         }
-      );
-      unsub = () => listener.subscription.unsubscribe();
+
+        setIsAuthenticated(true);
+        setAuthChecking(false);
+
+        const { data: listener } = supabase.auth.onAuthStateChange(
+          (_event, session) => {
+            if (!session) {
+              setIsAuthenticated(false);
+              router.push("/login");
+            }
+          }
+        );
+        unsub = () => listener.subscription.unsubscribe();
+      } catch (err) {
+        console.error("Auth check error:", err);
+        router.push("/login");
+      }
     })();
     return () => {
       if (unsub) unsub();
     };
   }, [router, supabase.auth]);
+
+  // Show loading while checking auth
+  if (authChecking || !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white via-blue-50 to-purple-50">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+          <p className="mt-4 text-slate-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Initialize state from URL parameters
   const [selectedCallCenter, setSelectedCallCenter] = useState<string>(
@@ -234,12 +262,19 @@ export function Dashboard() {
 
   const handleLogout = useCallback(async () => {
     try {
-      await supabase.auth.signOut();
-      router.push("/login");
+      // Sign out with scope: global to clear session everywhere
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
+
+      // Ignore session_not_found errors (session already expired)
+      if (error && !error.message.includes('session_not_found')) {
+        console.error("Logout error:", error);
+      }
     } catch (error) {
       console.error("Logout error:", error);
-      // Force redirect even if signOut fails
+    } finally {
+      // Always redirect to login regardless of signOut result
       router.push("/login");
+      router.refresh(); // Force a full page refresh to clear any cached state
     }
   }, [supabase.auth, router]);
 
