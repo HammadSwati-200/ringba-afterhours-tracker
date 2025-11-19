@@ -142,7 +142,9 @@ export default function RingbaCallsPage() {
     }
   }, [isAuthenticated, fetchCalls]);
 
-  const handleDateRangeChange = (start: Date, end: Date) => {
+  const handleDateRangeChange = (start: Date | null, end: Date | null) => {
+    if (!start || !end) return;
+
     // Normalize to full day range
     const normalizedStart = new Date(start);
     normalizedStart.setHours(0, 0, 0, 0);

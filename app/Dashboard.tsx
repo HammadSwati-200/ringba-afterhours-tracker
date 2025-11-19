@@ -170,6 +170,7 @@ export function Dashboard() {
             totalLeadsSent: cc.inHours.totalLeads,
             afterHours: {
               totalLeads: 0,
+              totalCalls: 0,
               callbacks: 0,
               callbackRate: 0,
             },
@@ -182,6 +183,7 @@ export function Dashboard() {
             totalLeadsSent: cc.afterHours.totalLeads,
             inHours: {
               totalLeads: 0,
+              totalCalls: 0,
               uniqueCalls: 0,
               callRate: 0,
             },

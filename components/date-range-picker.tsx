@@ -20,6 +20,7 @@ export interface DateRange {
 interface DateRangePickerProps {
   date?: DateRange | undefined;
   setDate?: (date: DateRange | undefined) => void;
+  dateRange?: { start: Date; end: Date };
   onDateRangeChange?: (start: Date | null, end: Date | null) => void;
   activeFilter?: string;
   setActiveFilter?: (filter: string | null) => void;
