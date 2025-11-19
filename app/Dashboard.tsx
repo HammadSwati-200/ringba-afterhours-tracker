@@ -585,69 +585,201 @@ export function Dashboard() {
                           Operating Hours
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
-                          <div>Total Lead Sent</div>
-                          <div className="text-xs font-normal text-slate-500">
-                            (from iRev)
+                          <div className="flex items-center justify-center gap-1">
+                            <div>
+                              <div>Total Lead Sent</div>
+                              <div className="text-xs font-normal text-slate-500">
+                                (from iRev)
+                              </div>
+                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Total number of leads sent from iRev platform for this call center</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
-                          <div>Total Calls</div>
-                          <div className="text-xs font-normal text-slate-500">
-                            (from Ringba)
+                          <div className="flex items-center justify-center gap-1">
+                            <div>
+                              <div>Total Calls</div>
+                              <div className="text-xs font-normal text-slate-500">
+                                (from Ringba)
+                              </div>
+                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Total number of calls recorded in Ringba for this call center</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
-                          <div>Total Leads Sent</div>
-                          <div className="text-xs font-normal text-slate-500">
-                            (In-Hours)
+                          <div className="flex items-center justify-center gap-1">
+                            <div>
+                              <div>Total Leads Sent</div>
+                              <div className="text-xs font-normal text-slate-500">
+                                (In-Hours)
+                              </div>
+                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Number of leads sent during business hours</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
-                          <div>Total Calls</div>
-                          <div className="text-xs font-normal text-slate-500">
-                            (In-Hours from Ringba)
+                          <div className="flex items-center justify-center gap-1">
+                            <div>
+                              <div>Total Calls</div>
+                              <div className="text-xs font-normal text-slate-500">
+                                (In-Hours from Ringba)
+                              </div>
+                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Total count of non-SMS calls received during business hours</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
-                          <div>Total Unique Call</div>
-                          <div className="text-xs font-normal text-slate-500">
-                            (In-Hours)
+                          <div className="flex items-center justify-center gap-1">
+                            <div>
+                              <div>Total Unique Call</div>
+                              <div className="text-xs font-normal text-slate-500">
+                                (In-Hours)
+                              </div>
+                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Number of in-hours leads that received at least one in-hours call</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
-                          <div>Call Rate %</div>
-                          <div className="text-xs font-normal text-slate-500">
-                            (In-Hours)
+                          <div className="flex items-center justify-center gap-1">
+                            <div>
+                              <div>Call Rate %</div>
+                              <div className="text-xs font-normal text-slate-500">
+                                (In-Hours)
+                              </div>
+                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Percentage of in-hours leads that received calls (Unique Calls / Total Leads × 100)</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
-                          <div>Total Leads Sent</div>
-                          <div className="text-xs font-normal text-slate-500">
-                            (After-Hours)
+                          <div className="flex items-center justify-center gap-1">
+                            <div>
+                              <div>Total Leads Sent</div>
+                              <div className="text-xs font-normal text-slate-500">
+                                (After-Hours)
+                              </div>
+                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Number of leads sent outside business hours</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
-                          <div>Total Calls</div>
-                          <div className="text-xs font-normal text-slate-500">
-                            (After-Hours from Ringba)
+                          <div className="flex items-center justify-center gap-1">
+                            <div>
+                              <div>Total Calls</div>
+                              <div className="text-xs font-normal text-slate-500">
+                                (After-Hours from Ringba)
+                              </div>
+                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Total count of SMS/callback calls during business hours (after-hours recovery)</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
-                          <div>Total Unique Call</div>
-                          <div className="text-xs font-normal text-slate-500">
-                            (After Hour Recovery)
+                          <div className="flex items-center justify-center gap-1">
+                            <div>
+                              <div>Total Unique Call</div>
+                              <div className="text-xs font-normal text-slate-500">
+                                (After Hour Recovery)
+                              </div>
+                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Number of after-hours leads that received callbacks</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
-                          <div>Call Rate %</div>
-                          <div className="text-xs font-normal text-slate-500">
-                            (After-Hours)
+                          <div className="flex items-center justify-center gap-1">
+                            <div>
+                              <div>Call Rate %</div>
+                              <div className="text-xs font-normal text-slate-500">
+                                (After-Hours)
+                              </div>
+                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Percentage of after-hours leads that received callbacks (Callbacks / Total Leads × 100)</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
-                          <div>Total Call Missed</div>
-                          <div className="text-xs font-normal text-slate-500">
-                            (After Hours)
+                          <div className="flex items-center justify-center gap-1">
+                            <div>
+                              <div>Total Call Missed</div>
+                              <div className="text-xs font-normal text-slate-500">
+                                (After Hours)
+                              </div>
+                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Number of after-hours leads that did NOT receive any callback</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableHead>
                       </TableRow>
