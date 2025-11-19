@@ -107,18 +107,6 @@ export function Dashboard() {
     };
   }, [router, supabase.auth]);
 
-  // Show loading while checking auth
-  if (authChecking || !isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white via-blue-50 to-purple-50">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
-          <p className="mt-4 text-slate-600">Checking authentication...</p>
-        </div>
-      </div>
-    );
-  }
-
   // Fetch data on mount and when date range changes
   useEffect(() => {
     fetchMetrics(dateRange);
@@ -262,10 +250,10 @@ export function Dashboard() {
   const handleLogout = useCallback(async () => {
     try {
       // Sign out with scope: global to clear session everywhere
-      const { error } = await supabase.auth.signOut({ scope: 'global' });
+      const { error } = await supabase.auth.signOut({ scope: "global" });
 
       // Ignore session_not_found errors (session already expired)
-      if (error && !error.message.includes('session_not_found')) {
+      if (error && !error.message.includes("session_not_found")) {
         console.error("Logout error:", error);
       }
     } catch (error) {
@@ -305,6 +293,18 @@ export function Dashboard() {
       afterHoursLeads: filteredMetrics.totalAfterHoursLeads,
     };
   }, [filteredMetrics]);
+
+  // Show loading while checking auth
+  if (authChecking || !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white via-blue-50 to-purple-50">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+          <p className="mt-4 text-slate-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <TooltipProvider>
