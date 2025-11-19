@@ -63,8 +63,15 @@ export function Dashboard() {
   const { metrics, loading, error, fetchMetrics } = useCallCenterMetrics();
   const { dateRange, updateDateRange } = useDateRange();
 
+  // ALL useState hooks must be declared at the top, before any conditional returns
   const [authChecking, setAuthChecking] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [selectedCallCenter, setSelectedCallCenter] = useState<string>(
+    searchParams.get("callCenter") || "all"
+  );
+  const [selectedFilter, setSelectedFilter] = useState<string>(
+    searchParams.get("filter") || "all"
+  );
 
   // Auth check - redirect to login if not authenticated
   useEffect(() => {
@@ -111,14 +118,6 @@ export function Dashboard() {
       </div>
     );
   }
-
-  // Initialize state from URL parameters
-  const [selectedCallCenter, setSelectedCallCenter] = useState<string>(
-    searchParams.get("callCenter") || "all"
-  );
-  const [selectedFilter, setSelectedFilter] = useState<string>(
-    searchParams.get("filter") || "all"
-  );
 
   // Fetch data on mount and when date range changes
   useEffect(() => {
