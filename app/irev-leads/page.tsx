@@ -97,11 +97,6 @@ export default function IrevLeadsPage() {
           .gte("timestampz", dateRange.start.toISOString())
           .lte("timestampz", dateRange.end.toISOString());
 
-        // Add call center filter if not "all"
-        if (selectedCallCenter !== "all") {
-          query = query.eq("utm_source", selectedCallCenter);
-        }
-
         const { data, error } = await query
           .order("timestampz", { ascending: false })
           .range(page * pageSize, (page + 1) * pageSize - 1);
@@ -114,7 +109,26 @@ export default function IrevLeadsPage() {
         page++;
       }
 
-      setLeads(allLeads);
+      console.log(`Fetched ${allLeads.length} total leads`);
+      console.log("Selected call center:", selectedCallCenter);
+
+      // Log unique call center values to see what's actually in the database
+      const uniqueCallCenters = [...new Set(allLeads.map(lead => lead.utm_source))];
+      console.log("Unique call centers in database:", uniqueCallCenters);
+
+      // Normalize function to handle both CC1 and CC_1 formats
+      const normalizeCallCenter = (cc: string) => cc?.replace(/_/g, '');
+
+      // Filter client-side by call center if not "all"
+      const filteredLeads = selectedCallCenter !== "all"
+        ? allLeads.filter(lead =>
+            normalizeCallCenter(lead.utm_source) === normalizeCallCenter(selectedCallCenter)
+          )
+        : allLeads;
+
+      console.log(`After filter: ${filteredLeads.length} leads`);
+
+      setLeads(filteredLeads);
     } catch (error) {
       console.error("Error fetching leads:", error);
     } finally {
@@ -338,7 +352,6 @@ export default function IrevLeadsPage() {
                 data={leads}
                 searchKey="utm_source"
                 searchPlaceholder="Search in table..."
-                callCenterKey="utm_source"
                 callCenters={callCenterHours}
                 onCallCenterChange={setSelectedCallCenter}
                 selectedCallCenter={selectedCallCenter}

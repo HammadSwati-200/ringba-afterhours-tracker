@@ -601,6 +601,12 @@ export function Dashboard() {
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
+                          <div>Total Calls</div>
+                          <div className="text-xs font-normal text-slate-500">
+                            (In-Hours from Ringba)
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-center">
                           <div>Total Unique Call</div>
                           <div className="text-xs font-normal text-slate-500">
                             (In-Hours)
@@ -616,6 +622,12 @@ export function Dashboard() {
                           <div>Total Leads Sent</div>
                           <div className="text-xs font-normal text-slate-500">
                             (After-Hours)
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-center">
+                          <div>Total Calls</div>
+                          <div className="text-xs font-normal text-slate-500">
+                            (After-Hours from Ringba)
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
@@ -659,6 +671,9 @@ export function Dashboard() {
                           <TableCell className="text-center text-slate-700">
                             {formatNumber(cc.inHours.totalLeads)}
                           </TableCell>
+                          <TableCell className="text-center text-blue-700 font-medium">
+                            {formatNumber(cc.inHours.totalCalls)}
+                          </TableCell>
                           <TableCell className="text-center text-emerald-700 font-medium">
                             {formatNumber(cc.inHours.uniqueCalls)}
                           </TableCell>
@@ -667,6 +682,9 @@ export function Dashboard() {
                           </TableCell>
                           <TableCell className="text-center text-slate-700">
                             {formatNumber(cc.afterHours.totalLeads)}
+                          </TableCell>
+                          <TableCell className="text-center text-orange-700 font-medium">
+                            {formatNumber(cc.afterHours.totalCalls)}
                           </TableCell>
                           <TableCell className="text-center text-purple-700 font-medium">
                             {formatNumber(cc.afterHours.callbacks)}

@@ -16,6 +16,7 @@ export interface CallCenterMetrics {
   // In-Hours Metrics
   inHours: {
     totalLeads: number; // Total leads during business hours
+    totalCalls: number; // Total count of in-hours calls from Ringba (non-SMS)
     uniqueCalls: number; // Unique leads that had ≥1 matched call during in-hours
     callRate: number; // (uniqueCalls / totalLeads) × 100
   };
@@ -23,6 +24,7 @@ export interface CallCenterMetrics {
   // After-Hours Metrics
   afterHours: {
     totalLeads: number; // Total leads outside business hours
+    totalCalls: number; // Total count of after-hours calls from Ringba (SMS)
     callbacks: number; // After-hours leads that received callbacks
     callbackRate: number; // (callbacks / totalLeads) × 100
   };

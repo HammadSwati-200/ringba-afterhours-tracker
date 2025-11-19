@@ -82,11 +82,14 @@ export function calculateMetrics(
     callCenterGroups.get(cc)!.push(match);
   });
 
-  // Step 3b: Group calls by call center for total count
-  const callsByCallCenter = new Map<string, number>();
+  // Step 3b: Group calls by call center
+  const callsByCallCenter = new Map<string, NormalizedCall[]>();
   normalizedCalls.forEach((call) => {
     const cc = call.callCenter;
-    callsByCallCenter.set(cc, (callsByCallCenter.get(cc) || 0) + 1);
+    if (!callsByCallCenter.has(cc)) {
+      callsByCallCenter.set(cc, []);
+    }
+    callsByCallCenter.get(cc)!.push(call);
   });
 
   console.log(`✅ Grouped into ${callCenterGroups.size} call centers`);
@@ -98,8 +101,8 @@ export function calculateMetrics(
   let totalCallbacks = 0;
 
   callCenterGroups.forEach((matches, callCenter) => {
-    const totalCallsForCC = callsByCallCenter.get(callCenter) || 0;
-    const metrics = calculateCallCenterMetrics(callCenter, matches, totalCallsForCC);
+    const callsForCC = callsByCallCenter.get(callCenter) || [];
+    const metrics = calculateCallCenterMetrics(callCenter, matches, callsForCC);
     byCallCenter.push(metrics);
 
     totalInHoursLeads += metrics.inHours.totalLeads;
@@ -134,7 +137,7 @@ export function calculateMetrics(
 function calculateCallCenterMetrics(
   callCenter: string,
   matches: LeadCallMatch[],
-  totalCalls: number
+  allCalls: NormalizedCall[]
 ): CallCenterMetrics {
   let inHoursLeads = 0;
   let inHoursUniqueCalls = 0;
@@ -142,8 +145,30 @@ function calculateCallCenterMetrics(
   let afterHoursCallbacks = 0;
   let totalUniqueCalls = 0;
 
+  // Count actual calls from Ringba (not just matched ones)
+  let totalInHoursCalls = 0;
+  let totalAfterHoursCalls = 0;
+
+  // Count all calls by type
+  allCalls.forEach((call) => {
+    if (call.isAfterHours) {
+      totalAfterHoursCalls++;
+    } else {
+      totalInHoursCalls++;
+    }
+  });
+
   // Track unique leads that received ANY call (for total unique calls)
   const leadsWithCalls = new Set<string>();
+
+  // Debug logging for first call center
+  if (callCenter === "CC1") {
+    console.log(`\n=== DEBUG CC1 Metrics ===`);
+    console.log(`Total matches: ${matches.length}`);
+    console.log(`Total calls from Ringba: ${allCalls.length}`);
+    console.log(`In-hours calls (non-SMS): ${totalInHoursCalls}`);
+    console.log(`After-hours calls (SMS): ${totalAfterHoursCalls}`);
+  }
 
   matches.forEach((match) => {
     const { lead, calls } = match;
@@ -166,11 +191,32 @@ function calculateCallCenterMetrics(
       inHoursLeads++;
 
       // Check if this in-hours lead has at least one in-hours call (not SMS)
-      if (hasInHoursCall(match)) {
+      const hasInHours = hasInHoursCall(match);
+      if (hasInHours) {
         inHoursUniqueCalls++;
+      }
+
+      // Debug for CC1 in-hours leads
+      if (callCenter === "CC1" && inHoursLeads <= 5) {
+        console.log(`In-hours lead #${inHoursLeads}:`, {
+          phone: lead.phone,
+          timestamp: lead.timestamp,
+          callsCount: calls.length,
+          hasInHoursCall: hasInHours,
+          calls: calls.map(c => ({ publisherName: c.publisherName, isAfterHours: c.isAfterHours }))
+        });
       }
     }
   });
+
+  // Final debug for CC1
+  if (callCenter === "CC1") {
+    console.log(`In-hours leads: ${inHoursLeads}`);
+    console.log(`In-hours unique calls: ${inHoursUniqueCalls}`);
+    console.log(`After-hours leads: ${afterHoursLeads}`);
+    console.log(`After-hours callbacks: ${afterHoursCallbacks}`);
+    console.log(`===\n`);
+  }
 
   // Total unique calls = number of unique leads that received any call
   totalUniqueCalls = leadsWithCalls.size;
@@ -192,16 +238,18 @@ function calculateCallCenterMetrics(
     callCenter,
     operatingHours,
     totalLeadsSent,
-    totalCalls,
+    totalCalls: allCalls.length,
     totalUniqueCalls,
     totalCallsMissedAfterHours,
     inHours: {
       totalLeads: inHoursLeads,
+      totalCalls: totalInHoursCalls,
       uniqueCalls: inHoursUniqueCalls,
       callRate: Math.min(callRate, 100), // Cap at 100% as per requirement
     },
     afterHours: {
       totalLeads: afterHoursLeads,
+      totalCalls: totalAfterHoursCalls,
       callbacks: afterHoursCallbacks,
       callbackRate,
     },

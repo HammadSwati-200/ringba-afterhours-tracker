@@ -43,10 +43,21 @@ export function getCallTimestamp(call: RingbaCall): Date | null {
 /**
  * Check if call is after-hours based on publisher_name
  * After-hours = publisher_name contains "SMS" (case-insensitive)
+ * Examples: SMS-PP, SMS, Text, etc.
+ *
+ * Any call WITH "SMS" in publisher_name = after-hours call (callback)
+ * Any call WITHOUT "SMS" = in-hours call (regular call)
  */
 export function isCallAfterHours(call: RingbaCall): boolean {
   if (!call.publisher_name) return false;
-  return call.publisher_name.toLowerCase().includes("sms");
+  const publisherLower = call.publisher_name.toLowerCase();
+
+  // Check for SMS-related keywords that indicate after-hours callbacks
+  return publisherLower.includes("sms") ||
+         publisherLower.includes("text") ||
+         publisherLower.includes("txt") ||
+         publisherLower.includes("message") ||
+         publisherLower.includes("messaging");
 }
 
 /**

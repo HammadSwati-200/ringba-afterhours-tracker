@@ -44,7 +44,6 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   searchKey?: string;
   searchPlaceholder?: string;
-  callCenterKey?: string;
   callCenters?: Array<{ id: string; name: string }>;
   onCallCenterChange?: (value: string) => void;
   selectedCallCenter?: string;
@@ -55,7 +54,6 @@ export function DataTable<TData, TValue>({
   data,
   searchKey,
   searchPlaceholder = "Filter...",
-  callCenterKey,
   callCenters,
   onCallCenterChange,
   selectedCallCenter = "all",

@@ -97,11 +97,6 @@ export default function RingbaCallsPage() {
           .gte("call_date", dateRange.start.toISOString())
           .lte("call_date", dateRange.end.toISOString());
 
-        // Add call center filter if not "all"
-        if (selectedCallCenter !== "all") {
-          query = query.eq("call_center", selectedCallCenter);
-        }
-
         const { data, error } = await query
           .order("call_date", { ascending: false })
           .range(page * pageSize, (page + 1) * pageSize - 1);
@@ -114,7 +109,26 @@ export default function RingbaCallsPage() {
         page++;
       }
 
-      setCalls(allCalls);
+      console.log(`Fetched ${allCalls.length} total calls`);
+      console.log("Selected call center:", selectedCallCenter);
+
+      // Log unique call center values to see what's actually in the database
+      const uniqueCallCenters = [...new Set(allCalls.map(call => call.call_center))];
+      console.log("Unique call centers in database:", uniqueCallCenters);
+
+      // Normalize function to handle both CC1 and CC_1 formats
+      const normalizeCallCenter = (cc: string) => cc?.replace(/_/g, '');
+
+      // Filter client-side by call center if not "all"
+      const filteredCalls = selectedCallCenter !== "all"
+        ? allCalls.filter(call =>
+            normalizeCallCenter(call.call_center) === normalizeCallCenter(selectedCallCenter)
+          )
+        : allCalls;
+
+      console.log(`After filter: ${filteredCalls.length} calls`);
+
+      setCalls(filteredCalls);
     } catch (error) {
       console.error("Error fetching calls:", error);
     } finally {
@@ -343,7 +357,6 @@ export default function RingbaCallsPage() {
                 data={calls}
                 searchKey="call_center"
                 searchPlaceholder="Search in table..."
-                callCenterKey="call_center"
                 callCenters={callCenterHours}
                 onCallCenterChange={setSelectedCallCenter}
                 selectedCallCenter={selectedCallCenter}
