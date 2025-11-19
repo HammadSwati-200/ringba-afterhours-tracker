@@ -30,9 +30,20 @@ export function calculateMetrics(
   console.log("🔄 Starting metrics calculation...");
   console.log(`📊 Raw data: ${rawLeads.length} leads, ${rawCalls.length} calls`);
 
+  // Debug: Log sample of raw data
+  if (rawLeads.length > 0) {
+    console.log("📝 Sample lead:", JSON.stringify(rawLeads[0], null, 2));
+  }
+  if (rawCalls.length > 0) {
+    console.log("📞 Sample call:", JSON.stringify(rawCalls[0], null, 2));
+  }
+
   // Step 1: Normalize and classify all data
   const normalizedLeads: NormalizedLead[] = [];
   const normalizedCalls: NormalizedCall[] = [];
+
+  let filteredLeadsCount = 0;
+  let filteredCallsCount = 0;
 
   rawLeads.forEach((lead) => {
     const isAfterHours = classifyLeadByTimestamp(
@@ -42,6 +53,8 @@ export function calculateMetrics(
     const normalized = normalizeLead(lead, isAfterHours);
     if (normalized) {
       normalizedLeads.push(normalized);
+    } else {
+      filteredLeadsCount++;
     }
   });
 
@@ -49,10 +62,18 @@ export function calculateMetrics(
     const normalized = normalizeCall(call);
     if (normalized) {
       normalizedCalls.push(normalized);
+    } else {
+      filteredCallsCount++;
     }
   });
 
   console.log(`✅ Normalized: ${normalizedLeads.length} leads, ${normalizedCalls.length} calls`);
+  if (filteredLeadsCount > 0) {
+    console.warn(`⚠️  Filtered out ${filteredLeadsCount} leads (missing timestamp)`);
+  }
+  if (filteredCallsCount > 0) {
+    console.warn(`⚠️  Filtered out ${filteredCallsCount} calls (missing timestamp)`);
+  }
 
   // Step 2: Match leads with calls
   const matchMap = matchLeadsWithCalls(normalizedLeads, normalizedCalls);
@@ -69,6 +90,12 @@ export function calculateMetrics(
     callCenterGroups.get(cc)!.push(match);
   });
 
+  // Debug: Log lead counts by call center
+  console.log("📊 Leads by call center:");
+  callCenterGroups.forEach((matches, cc) => {
+    console.log(`  ${cc}: ${matches.length} leads`);
+  });
+
   // Step 3b: Group calls by call center for total count
   const callsByCallCenter = new Map<string, number>();
   normalizedCalls.forEach((call) => {
@@ -77,6 +104,12 @@ export function calculateMetrics(
   });
 
   console.log(`✅ Grouped into ${callCenterGroups.size} call centers`);
+
+  // Debug: Log call counts by call center
+  console.log("📊 Calls by call center:");
+  callsByCallCenter.forEach((count, cc) => {
+    console.log(`  ${cc}: ${count} calls`);
+  });
 
   // Step 4: Calculate metrics per call center
   const byCallCenter: CallCenterMetrics[] = [];
@@ -132,12 +165,31 @@ function calculateCallCenterMetrics(
   // Track unique leads that received ANY call (for total unique calls)
   const leadsWithCalls = new Set<string>();
 
-  matches.forEach((match) => {
+  // Debug logging for CC1
+  const isCC1 = callCenter === "CC1";
+  if (isCC1) {
+    console.log(`\n🔍 Detailed CC1 Analysis:`);
+    console.log(`  Total matches (leads): ${matches.length} (should equal Total Lead Sent)`);
+    console.log(`  Total calls from Ringba: ${totalCalls}`);
+  }
+
+  matches.forEach((match, index) => {
     const { lead, calls } = match;
 
     // Track total unique calls (any lead that received any call)
     if (calls.length > 0) {
       leadsWithCalls.add(`${lead.callCenter}-${lead.cid || lead.phone}`);
+    }
+
+    // Debug first few leads for CC1
+    if (isCC1 && index < 3) {
+      console.log(`  Lead ${index + 1}:`, {
+        timestamp: lead.timestamp.toISOString(),
+        isAfterHours: lead.isAfterHours,
+        phone: lead.phone,
+        cid: lead.cid,
+        callsCount: calls.length,
+      });
     }
 
     if (lead.isAfterHours) {
@@ -174,6 +226,16 @@ function calculateCallCenterMetrics(
 
   // Get operating hours string
   const operatingHours = formatOperatingHours(callCenter);
+
+  // Debug final metrics for CC1
+  if (isCC1) {
+    console.log(`  Final CC1 Metrics:`);
+    console.log(`    Total Lead Sent: ${totalLeadsSent}`);
+    console.log(`    Total Calls: ${totalCalls}`);
+    console.log(`    In-Hours Leads: ${inHoursLeads}`);
+    console.log(`    After-Hours Leads: ${afterHoursLeads}`);
+    console.log(`    Total: ${inHoursLeads + afterHoursLeads} (should equal ${totalLeadsSent})`);
+  }
 
   return {
     callCenter,

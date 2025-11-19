@@ -538,7 +538,24 @@ export function Dashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredMetrics.byCallCenter.map((cc, idx) => (
+                      {filteredMetrics.byCallCenter.map((cc, idx) => {
+                        // Debug: Log CC1 data for verification
+                        if (cc.callCenter === "CC1") {
+                          console.log("🎯 CC1 Table Row Data:", {
+                            callCenter: cc.callCenter,
+                            operatingHours: cc.operatingHours,
+                            totalLeadsSent: cc.totalLeadsSent,
+                            totalCalls: cc.totalCalls,
+                            inHours_totalLeads: cc.inHours.totalLeads,
+                            inHours_uniqueCalls: cc.inHours.uniqueCalls,
+                            inHours_callRate: cc.inHours.callRate,
+                            afterHours_totalLeads: cc.afterHours.totalLeads,
+                            afterHours_callbacks: cc.afterHours.callbacks,
+                            afterHours_callbackRate: cc.afterHours.callbackRate,
+                            totalCallsMissedAfterHours: cc.totalCallsMissedAfterHours,
+                          });
+                        }
+                        return (
                         <TableRow
                           key={idx}
                           className="hover:bg-slate-50 transition-colors"
@@ -577,7 +594,8 @@ export function Dashboard() {
                             {formatNumber(cc.totalCallsMissedAfterHours)}
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
