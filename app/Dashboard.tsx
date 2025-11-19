@@ -597,7 +597,10 @@ export function Dashboard() {
                                 <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Total number of leads sent from iRev platform for this call center</p>
+                                <p>
+                                  Total number of leads sent from iRev platform
+                                  for this call center
+                                </p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
@@ -615,7 +618,10 @@ export function Dashboard() {
                                 <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Total number of calls recorded in Ringba for this call center</p>
+                                <p>
+                                  Total number of calls recorded in Ringba for
+                                  this call center
+                                </p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
@@ -633,7 +639,9 @@ export function Dashboard() {
                                 <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Number of leads sent during business hours</p>
+                                <p>
+                                  Number of leads sent during business hours
+                                </p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
@@ -651,7 +659,10 @@ export function Dashboard() {
                                 <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Total count of non-SMS calls received during business hours</p>
+                                <p>
+                                  Total count of non-SMS calls received during
+                                  business hours
+                                </p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
@@ -669,7 +680,10 @@ export function Dashboard() {
                                 <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Number of in-hours leads that received at least one in-hours call</p>
+                                <p>
+                                  Number of in-hours leads that received at
+                                  least one in-hours call
+                                </p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
@@ -687,7 +701,10 @@ export function Dashboard() {
                                 <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Percentage of in-hours leads that received calls (Unique Calls / Total Leads × 100)</p>
+                                <p>
+                                  Percentage of in-hours leads that received
+                                  calls (Unique Calls / Total Leads × 100)
+                                </p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
@@ -705,7 +722,9 @@ export function Dashboard() {
                                 <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Number of leads sent outside business hours</p>
+                                <p>
+                                  Number of leads sent outside business hours
+                                </p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
@@ -723,7 +742,10 @@ export function Dashboard() {
                                 <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Total count of SMS/callback calls during business hours (after-hours recovery)</p>
+                                <p>
+                                  Total count of SMS/callback calls during
+                                  business hours (after-hours recovery)
+                                </p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
@@ -741,7 +763,10 @@ export function Dashboard() {
                                 <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Number of after-hours leads that received callbacks</p>
+                                <p>
+                                  Number of after-hours leads that received
+                                  callbacks
+                                </p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
@@ -759,7 +784,10 @@ export function Dashboard() {
                                 <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Percentage of after-hours leads that received callbacks (Callbacks / Total Leads × 100)</p>
+                                <p>
+                                  Percentage of after-hours leads that received
+                                  callbacks (Callbacks / Total Leads × 100)
+                                </p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
@@ -777,7 +805,10 @@ export function Dashboard() {
                                 <Info className="w-4 h-4 text-slate-400 hover:text-slate-600 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Number of after-hours leads that did NOT receive any callback</p>
+                                <p>
+                                  Number of after-hours leads that did NOT
+                                  receive any callback
+                                </p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
