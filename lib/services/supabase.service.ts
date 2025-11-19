@@ -20,13 +20,17 @@ export class SupabaseService {
     let page = 0;
     let hasMore = true;
 
+    // Adjust endDate to end of day (23:59:59.999)
+    const adjustedEndDate = new Date(endDate);
+    adjustedEndDate.setHours(23, 59, 59, 999);
+
     try {
       while (hasMore) {
         const { data, error } = await this.client
           .from("irev_leads")
           .select("*")
           .gte("timestampz", startDate.toISOString())
-          .lte("timestampz", endDate.toISOString())
+          .lte("timestampz", adjustedEndDate.toISOString())
           .order("timestampz", { ascending: false })
           .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
 
@@ -61,13 +65,17 @@ export class SupabaseService {
     let page = 0;
     let hasMore = true;
 
+    // Adjust endDate to end of day (23:59:59.999)
+    const adjustedEndDate = new Date(endDate);
+    adjustedEndDate.setHours(23, 59, 59, 999);
+
     try {
       while (hasMore) {
         const { data, error } = await this.client
           .from("calls")
           .select("*")
           .gte("call_date", startDate.toISOString())
-          .lte("call_date", endDate.toISOString())
+          .lte("call_date", adjustedEndDate.toISOString())
           .order("call_date", { ascending: false })
           .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
 

@@ -21,33 +21,45 @@ export function exportAsJSON(metrics: AggregatedMetrics, filename: string = "met
 export function exportAsCSV(metrics: AggregatedMetrics, filename: string = "metrics.csv"): void {
   const headers = [
     "Call Center",
-    "Total Leads (In-Hours)",
-    "Unique Calls (In-Hours)",
+    "Operating Hours",
+    "Total Lead Sent (from iRev)",
+    "Total Calls (from Ringba)",
+    "Total Leads Sent (In-Hours)",
+    "Total Unique Call (In-Hours)",
     "Call Rate % (In-Hours)",
-    "Total Leads (After-Hours)",
-    "Callbacks",
-    "Callback Rate %",
+    "Total Leads Sent (After-Hours)",
+    "Total Unique Call (After Hour Recovery)",
+    "Call Rate % (After-Hours)",
+    "Total Call Missed After Hours",
   ];
 
   const rows = metrics.byCallCenter.map((cc) => [
     cc.callCenter,
+    cc.operatingHours,
+    cc.totalLeadsSent.toString(),
+    cc.totalCalls.toString(),
     cc.inHours.totalLeads.toString(),
     cc.inHours.uniqueCalls.toString(),
     formatPercentage(cc.inHours.callRate),
     cc.afterHours.totalLeads.toString(),
     cc.afterHours.callbacks.toString(),
     formatPercentage(cc.afterHours.callbackRate),
+    cc.totalCallsMissedAfterHours.toString(),
   ]);
 
   // Add summary row
   rows.push([
     "TOTAL",
+    "-",
+    metrics.byCallCenter.reduce((sum, cc) => sum + cc.totalLeadsSent, 0).toString(),
+    metrics.byCallCenter.reduce((sum, cc) => sum + cc.totalCalls, 0).toString(),
     metrics.totalInHoursLeads.toString(),
     "-",
     "-",
     metrics.totalAfterHoursLeads.toString(),
     metrics.totalCallbacks.toString(),
     formatPercentage(metrics.overallCallbackRate),
+    metrics.byCallCenter.reduce((sum, cc) => sum + cc.totalCallsMissedAfterHours, 0).toString(),
   ]);
 
   const csvContent = [headers, ...rows]

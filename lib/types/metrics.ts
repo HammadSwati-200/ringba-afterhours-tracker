@@ -5,6 +5,13 @@
 
 export interface CallCenterMetrics {
   callCenter: string; // Display name (no underscores)
+  operatingHours: string; // Display string for business hours (e.g., "9am-8pm PST, Mon-Fri")
+
+  // Total Metrics
+  totalLeadsSent: number; // ALL leads from irev_leads for this call center
+  totalCalls: number; // Total number of calls from Ringba (all calls for this call center)
+  totalUniqueCalls: number; // Total unique calls (no in-hours/after-hours filter)
+  totalCallsMissedAfterHours: number; // After-hours leads that did NOT receive any callback
 
   // In-Hours Metrics
   inHours: {

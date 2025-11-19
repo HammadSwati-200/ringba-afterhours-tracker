@@ -18,8 +18,9 @@ export interface DateRange {
 }
 
 interface DateRangePickerProps {
-  date: DateRange | undefined;
-  setDate: (date: DateRange | undefined) => void;
+  date?: DateRange | undefined;
+  setDate?: (date: DateRange | undefined) => void;
+  onDateRangeChange?: (start: Date | null, end: Date | null) => void;
   activeFilter?: string;
   setActiveFilter?: (filter: string | null) => void;
   className?: string;
@@ -28,14 +29,26 @@ interface DateRangePickerProps {
 export function DateRangePicker({
   date,
   setDate,
+  onDateRangeChange,
   activeFilter: externalActiveFilter,
   setActiveFilter: externalSetActiveFilter,
   className,
 }: DateRangePickerProps) {
+  // Initialize with default dates (last 7 days) if not provided
+  const getDefaultDates = () => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 7);
+    return { start, end };
+  };
+
+  const defaults = getDefaultDates();
   const [startDate, setStartDate] = React.useState<Date | null>(
-    date?.from || null
+    date?.from || defaults.start
   );
-  const [endDate, setEndDate] = React.useState<Date | null>(date?.to || null);
+  const [endDate, setEndDate] = React.useState<Date | null>(
+    date?.to || defaults.end
+  );
   const [isOpen, setIsOpen] = React.useState(false);
   const [internalActiveFilter, setInternalActiveFilter] = React.useState<
     string | null
@@ -96,13 +109,27 @@ export function DateRangePicker({
 
     setStartDate(start);
     setEndDate(end);
-    setDate({ from: start, to: end });
+
+    // Call the appropriate callback
+    if (setDate) {
+      setDate({ from: start, to: end });
+    }
+    if (onDateRangeChange) {
+      onDateRangeChange(start, end);
+    }
+
     setActiveFilter(type); // Set active filter
   };
 
   const handleConfirm = () => {
     if (startDate && endDate) {
-      setDate({ from: startDate, to: endDate });
+      // Call the appropriate callback
+      if (setDate) {
+        setDate({ from: startDate, to: endDate });
+      }
+      if (onDateRangeChange) {
+        onDateRangeChange(startDate, endDate);
+      }
       setIsOpen(false);
     }
   };

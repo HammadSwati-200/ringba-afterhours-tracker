@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -54,24 +55,96 @@ import { formatPercentage, formatNumber } from "@/lib/utils/calculations";
 import { callCenterHours } from "@/lib/call-center-hours";
 
 export function Dashboard() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const { metrics, loading, error, fetchMetrics } = useCallCenterMetrics();
   const { dateRange, updateDateRange } = useDateRange();
-  const [selectedCallCenter, setSelectedCallCenter] = useState<string>("all");
-  const [selectedFilter, setSelectedFilter] = useState<string>("all");
+
+  // Initialize state from URL parameters
+  const [selectedCallCenter, setSelectedCallCenter] = useState<string>(
+    searchParams.get("callCenter") || "all"
+  );
+  const [selectedFilter, setSelectedFilter] = useState<string>(
+    searchParams.get("filter") || "all"
+  );
 
   // Fetch data on mount and when date range changes
   useEffect(() => {
     fetchMetrics(dateRange);
   }, [dateRange, fetchMetrics]);
 
-  // Filter metrics based on selected call center
+  // Update URL parameters when filters change
+  useEffect(() => {
+    const params = new URLSearchParams();
+
+    if (selectedCallCenter !== "all") {
+      params.set("callCenter", selectedCallCenter);
+    }
+
+    if (selectedFilter !== "all") {
+      params.set("filter", selectedFilter);
+    }
+
+    if (dateRange.start && dateRange.end) {
+      const formatDate = (date: Date) => date.toISOString().split("T")[0];
+      const defaultStart = new Date();
+      defaultStart.setDate(defaultStart.getDate() - 7);
+
+      // Only add dates if they're not the default
+      if (formatDate(dateRange.start) !== formatDate(defaultStart) ||
+          formatDate(dateRange.end) !== formatDate(new Date())) {
+        params.set("startDate", formatDate(dateRange.start));
+        params.set("endDate", formatDate(dateRange.end));
+      }
+    }
+
+    const queryString = params.toString();
+    const newUrl = queryString ? `?${queryString}` : window.location.pathname;
+    router.replace(newUrl, { scroll: false });
+  }, [selectedCallCenter, selectedFilter, dateRange, router]);
+
+  // Filter metrics based on selected call center and lead type
   const filteredMetrics = useMemo(() => {
     if (!metrics) return null;
-    if (selectedCallCenter === "all") return metrics;
 
-    const filtered = metrics.byCallCenter.filter(
-      (cc) => cc.callCenter === selectedCallCenter
-    );
+    let filtered = metrics.byCallCenter;
+
+    // Filter by call center
+    if (selectedCallCenter !== "all") {
+      filtered = filtered.filter((cc) => cc.callCenter === selectedCallCenter);
+    }
+
+    // Filter by lead type (in-hours / after-hours)
+    if (selectedFilter !== "all") {
+      filtered = filtered.map((cc) => {
+        if (selectedFilter === "in-hours") {
+          // Show only in-hours data, zero out after-hours
+          return {
+            ...cc,
+            totalLeadsSent: cc.inHours.totalLeads,
+            afterHours: {
+              totalLeads: 0,
+              callbacks: 0,
+              callbackRate: 0,
+            },
+            totalCallsMissedAfterHours: 0,
+          };
+        } else if (selectedFilter === "after-hours") {
+          // Show only after-hours data, zero out in-hours
+          return {
+            ...cc,
+            totalLeadsSent: cc.afterHours.totalLeads,
+            inHours: {
+              totalLeads: 0,
+              uniqueCalls: 0,
+              callRate: 0,
+            },
+          };
+        }
+        return cc;
+      });
+    }
 
     return {
       ...metrics,
@@ -86,7 +159,7 @@ export function Dashboard() {
             100
           : 0,
     };
-  }, [metrics, selectedCallCenter]);
+  }, [metrics, selectedCallCenter, selectedFilter]);
 
   // Get unique call centers for dropdown
   const callCenters = useMemo(() => {
@@ -129,6 +202,16 @@ export function Dashboard() {
     window.location.href = "/login";
   }, []);
 
+  const handleClearFilters = useCallback(() => {
+    setSelectedCallCenter("all");
+    setSelectedFilter("all");
+    // Reset to default date range (last 7 days)
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 7);
+    updateDateRange(start, end);
+  }, [updateDateRange]);
+
   // Stats for display
   const stats = useMemo(() => {
     if (!filteredMetrics) {
@@ -163,7 +246,7 @@ export function Dashboard() {
             <Button
               onClick={handleLogout}
               variant="outline"
-              className="flex items-center gap-2 border-slate-300 hover:bg-slate-50"
+              className="flex items-center gap-2 border-slate-300 hover:bg-slate-50 text-slate-700"
             >
               <LogOut className="w-4 h-4" />
               Sign Out
@@ -229,11 +312,20 @@ export function Dashboard() {
 
             <div className="flex gap-2 w-full sm:w-auto">
               <Button
+                onClick={handleClearFilters}
+                variant="outline"
+                size="sm"
+                className="flex-1 sm:flex-none text-slate-700 hover:bg-red-50 hover:text-red-700 hover:border-red-300"
+              >
+                Clear Filters
+              </Button>
+
+              <Button
                 onClick={handleRefresh}
                 variant="outline"
                 size="sm"
                 disabled={loading}
-                className="flex-1 sm:flex-none"
+                className="flex-1 sm:flex-none text-slate-700"
               >
                 <RefreshCw
                   className={`mr-2 w-4 h-4 ${loading ? "animate-spin" : ""}`}
@@ -246,7 +338,7 @@ export function Dashboard() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1 sm:flex-none"
+                    className="flex-1 sm:flex-none text-slate-700"
                     disabled={!filteredMetrics}
                   >
                     <Download className="mr-2 w-4 h-4" />
@@ -364,30 +456,47 @@ export function Dashboard() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50 hover:bg-slate-100">
-                        <TableHead className="font-semibold text-slate-700">
+                        <TableHead className="font-semibold text-slate-700 text-center">
                           Call Center
                         </TableHead>
-                        <TableHead className="font-semibold text-slate-700 text-right">
-                          <div>Total Leads</div>
+                        <TableHead className="font-semibold text-slate-700 text-center">
+                          Operating Hours
+                        </TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-center">
+                          <div>Total Lead Sent</div>
+                          <div className="text-xs font-normal text-slate-500">(from iRev)</div>
+                        </TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-center">
+                          <div>Total Calls</div>
+                          <div className="text-xs font-normal text-slate-500">(from Ringba)</div>
+                        </TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-center">
+                          <div>Total Leads Sent</div>
                           <div className="text-xs font-normal text-slate-500">(In-Hours)</div>
                         </TableHead>
-                        <TableHead className="font-semibold text-slate-700 text-right">
-                          <div>Unique Calls</div>
+                        <TableHead className="font-semibold text-slate-700 text-center">
+                          <div>Total Unique Call</div>
                           <div className="text-xs font-normal text-slate-500">(In-Hours)</div>
                         </TableHead>
-                        <TableHead className="font-semibold text-slate-700 text-right">
+                        <TableHead className="font-semibold text-slate-700 text-center">
                           <div>Call Rate %</div>
                           <div className="text-xs font-normal text-slate-500">(In-Hours)</div>
                         </TableHead>
-                        <TableHead className="font-semibold text-slate-700 text-right">
-                          <div>Total Leads</div>
+                        <TableHead className="font-semibold text-slate-700 text-center">
+                          <div>Total Leads Sent</div>
                           <div className="text-xs font-normal text-slate-500">(After-Hours)</div>
                         </TableHead>
-                        <TableHead className="font-semibold text-slate-700 text-right">
-                          Callbacks
+                        <TableHead className="font-semibold text-slate-700 text-center">
+                          <div>Total Unique Call</div>
+                          <div className="text-xs font-normal text-slate-500">(After Hour Recovery)</div>
                         </TableHead>
-                        <TableHead className="font-semibold text-slate-700 text-right">
-                          Callback Rate %
+                        <TableHead className="font-semibold text-slate-700 text-center">
+                          <div>Call Rate %</div>
+                          <div className="text-xs font-normal text-slate-500">(After-Hours)</div>
+                        </TableHead>
+                        <TableHead className="font-semibold text-slate-700 text-center">
+                          <div>Total Call Missed</div>
+                          <div className="text-xs font-normal text-slate-500">(After Hours)</div>
                         </TableHead>
                       </TableRow>
                     </TableHeader>
@@ -397,26 +506,38 @@ export function Dashboard() {
                           key={idx}
                           className="hover:bg-slate-50 transition-colors"
                         >
-                          <TableCell className="font-medium text-slate-900">
+                          <TableCell className="font-medium text-slate-900 text-center">
                             {cc.callCenter}
                           </TableCell>
-                          <TableCell className="text-right text-slate-700">
+                          <TableCell className="text-slate-700 text-sm text-center">
+                            {cc.operatingHours}
+                          </TableCell>
+                          <TableCell className="text-center text-slate-700 font-medium">
+                            {formatNumber(cc.totalLeadsSent)}
+                          </TableCell>
+                          <TableCell className="text-center text-blue-700 font-medium">
+                            {formatNumber(cc.totalCalls)}
+                          </TableCell>
+                          <TableCell className="text-center text-slate-700">
                             {formatNumber(cc.inHours.totalLeads)}
                           </TableCell>
-                          <TableCell className="text-right text-emerald-700 font-medium">
+                          <TableCell className="text-center text-emerald-700 font-medium">
                             {formatNumber(cc.inHours.uniqueCalls)}
                           </TableCell>
-                          <TableCell className="text-right text-cyan-700 font-semibold">
+                          <TableCell className="text-center text-cyan-700 font-semibold">
                             {formatPercentage(cc.inHours.callRate)}
                           </TableCell>
-                          <TableCell className="text-right text-slate-700">
+                          <TableCell className="text-center text-slate-700">
                             {formatNumber(cc.afterHours.totalLeads)}
                           </TableCell>
-                          <TableCell className="text-right text-purple-700 font-medium">
+                          <TableCell className="text-center text-purple-700 font-medium">
                             {formatNumber(cc.afterHours.callbacks)}
                           </TableCell>
-                          <TableCell className="text-right text-cyan-700 font-semibold">
+                          <TableCell className="text-center text-cyan-700 font-semibold">
                             {formatPercentage(cc.afterHours.callbackRate)}
+                          </TableCell>
+                          <TableCell className="text-center text-red-700 font-medium">
+                            {formatNumber(cc.totalCallsMissedAfterHours)}
                           </TableCell>
                         </TableRow>
                       ))}

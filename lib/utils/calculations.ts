@@ -18,6 +18,7 @@ import {
 } from "./normalization";
 import { classifyLeadByTimestamp } from "./classification";
 import { matchLeadsWithCalls, hasInHoursCall, type LeadCallMatch } from "./matching";
+import { formatOperatingHours } from "@/lib/call-center-hours";
 
 /**
  * Calculate metrics for all call centers
@@ -57,7 +58,7 @@ export function calculateMetrics(
   const matchMap = matchLeadsWithCalls(normalizedLeads, normalizedCalls);
   console.log(`✅ Created ${matchMap.size} lead-call matches`);
 
-  // Step 3: Group by call center
+  // Step 3: Group by call center (leads)
   const callCenterGroups = new Map<string, LeadCallMatch[]>();
 
   matchMap.forEach((match) => {
@@ -66,6 +67,13 @@ export function calculateMetrics(
       callCenterGroups.set(cc, []);
     }
     callCenterGroups.get(cc)!.push(match);
+  });
+
+  // Step 3b: Group calls by call center for total count
+  const callsByCallCenter = new Map<string, number>();
+  normalizedCalls.forEach((call) => {
+    const cc = call.callCenter;
+    callsByCallCenter.set(cc, (callsByCallCenter.get(cc) || 0) + 1);
   });
 
   console.log(`✅ Grouped into ${callCenterGroups.size} call centers`);
@@ -77,7 +85,8 @@ export function calculateMetrics(
   let totalCallbacks = 0;
 
   callCenterGroups.forEach((matches, callCenter) => {
-    const metrics = calculateCallCenterMetrics(callCenter, matches);
+    const totalCallsForCC = callsByCallCenter.get(callCenter) || 0;
+    const metrics = calculateCallCenterMetrics(callCenter, matches, totalCallsForCC);
     byCallCenter.push(metrics);
 
     totalInHoursLeads += metrics.inHours.totalLeads;
@@ -111,15 +120,25 @@ export function calculateMetrics(
  */
 function calculateCallCenterMetrics(
   callCenter: string,
-  matches: LeadCallMatch[]
+  matches: LeadCallMatch[],
+  totalCalls: number
 ): CallCenterMetrics {
   let inHoursLeads = 0;
   let inHoursUniqueCalls = 0;
   let afterHoursLeads = 0;
   let afterHoursCallbacks = 0;
+  let totalUniqueCalls = 0;
+
+  // Track unique leads that received ANY call (for total unique calls)
+  const leadsWithCalls = new Set<string>();
 
   matches.forEach((match) => {
     const { lead, calls } = match;
+
+    // Track total unique calls (any lead that received any call)
+    if (calls.length > 0) {
+      leadsWithCalls.add(`${lead.callCenter}-${lead.cid || lead.phone}`);
+    }
 
     if (lead.isAfterHours) {
       // After-hours lead
@@ -140,12 +159,29 @@ function calculateCallCenterMetrics(
     }
   });
 
+  // Total unique calls = number of unique leads that received any call
+  totalUniqueCalls = leadsWithCalls.size;
+
   // Calculate rates
   const callRate = inHoursLeads > 0 ? (inHoursUniqueCalls / inHoursLeads) * 100 : 0;
   const callbackRate = afterHoursLeads > 0 ? (afterHoursCallbacks / afterHoursLeads) * 100 : 0;
 
+  // Calculate total leads sent (all leads for this call center)
+  const totalLeadsSent = matches.length;
+
+  // Calculate total calls missed after hours
+  const totalCallsMissedAfterHours = afterHoursLeads - afterHoursCallbacks;
+
+  // Get operating hours string
+  const operatingHours = formatOperatingHours(callCenter);
+
   return {
     callCenter,
+    operatingHours,
+    totalLeadsSent,
+    totalCalls,
+    totalUniqueCalls,
+    totalCallsMissedAfterHours,
     inHours: {
       totalLeads: inHoursLeads,
       uniqueCalls: inHoursUniqueCalls,
