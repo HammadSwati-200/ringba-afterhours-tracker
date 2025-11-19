@@ -46,6 +46,8 @@ import {
   Info,
   LogOut,
   AlertCircle,
+  FileText,
+  Database,
 } from "lucide-react";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { useCallCenterMetrics } from "@/lib/hooks/useCallCenterMetrics";
@@ -337,14 +339,32 @@ export function Dashboard() {
                 Track after-hours calls and callback rates across call centers
               </p>
             </div>
-            <Button
-              onClick={handleLogout}
-              variant="outline"
-              className="flex items-center gap-2 border-slate-300 hover:bg-slate-50 text-slate-700"
-            >
-              <LogOut className="w-4 h-4" />
-              Sign Out
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => router.push("/irev-leads")}
+                variant="outline"
+                className="flex items-center gap-2 border-slate-300 hover:bg-slate-50 text-slate-700"
+              >
+                <FileText className="w-4 h-4" />
+                iRev Leads
+              </Button>
+              <Button
+                onClick={() => router.push("/ringba-calls")}
+                variant="outline"
+                className="flex items-center gap-2 border-slate-300 hover:bg-slate-50 text-slate-700"
+              >
+                <Database className="w-4 h-4" />
+                Ringba Calls
+              </Button>
+              <Button
+                onClick={handleLogout}
+                variant="outline"
+                className="flex items-center gap-2 border-slate-300 hover:bg-slate-50 text-slate-700"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </Button>
+            </div>
           </div>
 
           {/* Error Message */}
