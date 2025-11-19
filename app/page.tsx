@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { Dashboard } from "./Dashboard";
 
 export default function Home() {
@@ -15,7 +16,9 @@ export default function Home() {
       </div>
 
       <div className="relative z-10 p-4 sm:p-6 lg:p-8">
-        <Dashboard />
+        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="text-lg text-slate-600">Loading...</div></div>}>
+          <Dashboard />
+        </Suspense>
       </div>
 
       <style jsx>{`

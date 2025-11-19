@@ -92,8 +92,10 @@ export function Dashboard() {
       defaultStart.setDate(defaultStart.getDate() - 7);
 
       // Only add dates if they're not the default
-      if (formatDate(dateRange.start) !== formatDate(defaultStart) ||
-          formatDate(dateRange.end) !== formatDate(new Date())) {
+      if (
+        formatDate(dateRange.start) !== formatDate(defaultStart) ||
+        formatDate(dateRange.end) !== formatDate(new Date())
+      ) {
         params.set("startDate", formatDate(dateRange.start));
         params.set("endDate", formatDate(dateRange.end));
       }
@@ -149,9 +151,18 @@ export function Dashboard() {
     return {
       ...metrics,
       byCallCenter: filtered,
-      totalInHoursLeads: filtered.reduce((sum, cc) => sum + cc.inHours.totalLeads, 0),
-      totalAfterHoursLeads: filtered.reduce((sum, cc) => sum + cc.afterHours.totalLeads, 0),
-      totalCallbacks: filtered.reduce((sum, cc) => sum + cc.afterHours.callbacks, 0),
+      totalInHoursLeads: filtered.reduce(
+        (sum, cc) => sum + cc.inHours.totalLeads,
+        0
+      ),
+      totalAfterHoursLeads: filtered.reduce(
+        (sum, cc) => sum + cc.afterHours.totalLeads,
+        0
+      ),
+      totalCallbacks: filtered.reduce(
+        (sum, cc) => sum + cc.afterHours.callbacks,
+        0
+      ),
       overallCallbackRate:
         filtered.reduce((sum, cc) => sum + cc.afterHours.totalLeads, 0) > 0
           ? (filtered.reduce((sum, cc) => sum + cc.afterHours.callbacks, 0) /
@@ -223,7 +234,9 @@ export function Dashboard() {
     }
 
     return {
-      totalCalls: filteredMetrics.totalInHoursLeads + filteredMetrics.totalAfterHoursLeads,
+      totalCalls:
+        filteredMetrics.totalInHoursLeads +
+        filteredMetrics.totalAfterHoursLeads,
       inHoursLeads: filteredMetrics.totalInHoursLeads,
       afterHoursLeads: filteredMetrics.totalAfterHoursLeads,
     };
@@ -260,7 +273,9 @@ export function Dashboard() {
                 <div className="flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
                   <div>
-                    <h3 className="font-semibold text-red-900">Error loading data</h3>
+                    <h3 className="font-semibold text-red-900">
+                      Error loading data
+                    </h3>
                     <p className="text-red-700 text-sm mt-1">{error.message}</p>
                     <Button
                       onClick={handleRefresh}
@@ -284,7 +299,10 @@ export function Dashboard() {
                 className="w-full sm:w-auto"
               />
 
-              <Select value={selectedCallCenter} onValueChange={setSelectedCallCenter}>
+              <Select
+                value={selectedCallCenter}
+                onValueChange={setSelectedCallCenter}
+              >
                 <SelectTrigger className="w-full sm:w-[200px] bg-white border-slate-300">
                   <SelectValue placeholder="All Call Centers" />
                 </SelectTrigger>
@@ -442,7 +460,8 @@ export function Dashboard() {
                   <RefreshCw className="w-8 h-8 text-slate-400 animate-spin mx-auto" />
                   <p className="text-slate-500 text-lg mt-4">Loading data...</p>
                 </div>
-              ) : !filteredMetrics || filteredMetrics.byCallCenter.length === 0 ? (
+              ) : !filteredMetrics ||
+                filteredMetrics.byCallCenter.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-slate-500 text-lg">
                     No data available for the selected date range.
@@ -464,39 +483,57 @@ export function Dashboard() {
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
                           <div>Total Lead Sent</div>
-                          <div className="text-xs font-normal text-slate-500">(from iRev)</div>
+                          <div className="text-xs font-normal text-slate-500">
+                            (from iRev)
+                          </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
                           <div>Total Calls</div>
-                          <div className="text-xs font-normal text-slate-500">(from Ringba)</div>
+                          <div className="text-xs font-normal text-slate-500">
+                            (from Ringba)
+                          </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
                           <div>Total Leads Sent</div>
-                          <div className="text-xs font-normal text-slate-500">(In-Hours)</div>
+                          <div className="text-xs font-normal text-slate-500">
+                            (In-Hours)
+                          </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
                           <div>Total Unique Call</div>
-                          <div className="text-xs font-normal text-slate-500">(In-Hours)</div>
+                          <div className="text-xs font-normal text-slate-500">
+                            (In-Hours)
+                          </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
                           <div>Call Rate %</div>
-                          <div className="text-xs font-normal text-slate-500">(In-Hours)</div>
+                          <div className="text-xs font-normal text-slate-500">
+                            (In-Hours)
+                          </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
                           <div>Total Leads Sent</div>
-                          <div className="text-xs font-normal text-slate-500">(After-Hours)</div>
+                          <div className="text-xs font-normal text-slate-500">
+                            (After-Hours)
+                          </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
                           <div>Total Unique Call</div>
-                          <div className="text-xs font-normal text-slate-500">(After Hour Recovery)</div>
+                          <div className="text-xs font-normal text-slate-500">
+                            (After Hour Recovery)
+                          </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
                           <div>Call Rate %</div>
-                          <div className="text-xs font-normal text-slate-500">(After-Hours)</div>
+                          <div className="text-xs font-normal text-slate-500">
+                            (After-Hours)
+                          </div>
                         </TableHead>
                         <TableHead className="font-semibold text-slate-700 text-center">
                           <div>Total Call Missed</div>
-                          <div className="text-xs font-normal text-slate-500">(After Hours)</div>
+                          <div className="text-xs font-normal text-slate-500">
+                            (After Hours)
+                          </div>
                         </TableHead>
                       </TableRow>
                     </TableHeader>
