@@ -252,12 +252,22 @@ export function Dashboard() {
       // Sign out with scope: global to clear session everywhere
       const { error } = await supabase.auth.signOut({ scope: "global" });
 
-      // Ignore session_not_found errors (session already expired)
-      if (error && !error.message.includes("session_not_found")) {
+      // Ignore expected session errors (session already expired/missing)
+      if (error &&
+          !error.message.includes("session_not_found") &&
+          !error.message.includes("Auth session missing")) {
         console.error("Logout error:", error);
       }
-    } catch (error) {
-      console.error("Logout error:", error);
+    } catch (error: unknown) {
+      // Ignore AuthSessionMissingError - this is expected when session is already gone
+      if (error instanceof Error) {
+        if (error.name !== "AuthSessionMissingError" &&
+            !error.message?.includes("Auth session missing")) {
+          console.error("Logout error:", error);
+        }
+      } else {
+        console.error("Logout error:", error);
+      }
     } finally {
       // Always redirect to login regardless of signOut result
       router.push("/login");
