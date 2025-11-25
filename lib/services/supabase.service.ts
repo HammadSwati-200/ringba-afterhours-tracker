@@ -48,7 +48,6 @@ export class SupabaseService {
         }
       }
 
-      console.log(`✅ Fetched ${allLeads.length} leads`);
       return allLeads;
     } catch (error) {
       console.error("Error in fetchLeads:", error);
@@ -93,7 +92,6 @@ export class SupabaseService {
         }
       }
 
-      console.log(`✅ Fetched ${allCalls.length} calls`);
       return allCalls;
     } catch (error) {
       console.error("Error in fetchCalls:", error);

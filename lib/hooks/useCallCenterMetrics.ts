@@ -29,8 +29,6 @@ export function useCallCenterMetrics(): UseCallCenterMetricsResult {
     setError(null);
 
     try {
-      console.log("🔄 Fetching data for date range:", dateRange);
-
       // Fetch data from Supabase
       const { leads, calls } = await supabaseService.fetchAllData(
         dateRange.start,
@@ -41,7 +39,6 @@ export function useCallCenterMetrics(): UseCallCenterMetricsResult {
       const calculatedMetrics = calculateMetrics(leads, calls);
 
       setMetrics(calculatedMetrics);
-      console.log("✅ Metrics updated successfully");
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Failed to fetch metrics");
       setError(error);

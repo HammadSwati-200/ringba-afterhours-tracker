@@ -46,27 +46,7 @@ export function matchLeadsWithCalls(
     }
   });
 
-  // Debug: Log unique phone numbers and call centers
-  const leadPhones = new Set(leads.filter(l => l.phone).map(l => l.phone));
-  const callPhones = new Set(calls.filter(c => c.phone).map(c => c.phone));
-  const leadCallCenters = new Set(leads.map(l => l.callCenter));
-  const callCallCenters = new Set(calls.map(c => c.callCenter));
-
-  console.log(`\n=== MATCHING DEBUG ===`);
-  console.log(`Leads: ${leads.length}, with phones: ${leadPhones.size}`);
-  console.log(`Calls: ${calls.length}, with phones: ${callPhones.size}`);
-  console.log(`Lead call centers:`, Array.from(leadCallCenters).slice(0, 10));
-  console.log(`Call call centers:`, Array.from(callCallCenters).slice(0, 10));
-
-  // Sample phones from each
-  console.log(`Sample lead phones:`, Array.from(leadPhones).slice(0, 5));
-  console.log(`Sample call phones:`, Array.from(callPhones).slice(0, 5));
-
   // Match each lead
-  let matchedLeadsCount = 0;
-  let phoneMatchCount = 0;
-  let cidMatchCount = 0;
-
   leads.forEach((lead) => {
     const leadKey = `${lead.callCenter}-${lead.cid || lead.phone || lead.timestamp.getTime()}`;
     let matchedCalls: NormalizedCall[] = [];
@@ -78,7 +58,6 @@ export function matchLeadsWithCalls(
       matchedCalls = phoneMatches.filter(
         (call) => call.callCenter === lead.callCenter
       );
-      if (matchedCalls.length > 0) phoneMatchCount++;
     }
 
     // Step 2: Fallback to cid ↔ clickId matching if no phone match
@@ -88,20 +67,13 @@ export function matchLeadsWithCalls(
       matchedCalls = cidMatches.filter(
         (call) => call.callCenter === lead.callCenter
       );
-      if (matchedCalls.length > 0) cidMatchCount++;
     }
-
-    if (matchedCalls.length > 0) matchedLeadsCount++;
 
     matchMap.set(leadKey, {
       lead,
       calls: matchedCalls,
     });
   });
-
-  console.log(`Matched leads: ${matchedLeadsCount}/${leads.length}`);
-  console.log(`Phone matches: ${phoneMatchCount}, CID matches: ${cidMatchCount}`);
-  console.log(`=== END MATCHING DEBUG ===\n`);
 
   return matchMap;
 }

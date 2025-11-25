@@ -19,6 +19,7 @@ import {
 import { classifyLeadByTimestamp } from "./classification";
 import { matchLeadsWithCalls, hasInHoursCall, type LeadCallMatch } from "./matching";
 import { formatOperatingHours } from "@/lib/call-center-hours";
+import { generateAndLogDailyBreakdown } from "./daily-logger";
 
 /**
  * Calculate metrics for all call centers
@@ -27,9 +28,6 @@ export function calculateMetrics(
   rawLeads: IrevLead[],
   rawCalls: RingbaCall[]
 ): AggregatedMetrics {
-  console.log("🔄 Starting metrics calculation...");
-  console.log(`📊 Raw data: ${rawLeads.length} leads, ${rawCalls.length} calls`);
-
   // Step 1: Normalize and classify all data
   const normalizedLeads: NormalizedLead[] = [];
   const normalizedCalls: NormalizedCall[] = [];
@@ -59,17 +57,11 @@ export function calculateMetrics(
     }
   });
 
-  console.log(`✅ Normalized: ${normalizedLeads.length} leads, ${normalizedCalls.length} calls`);
-  if (filteredLeadsCount > 0) {
-    console.warn(`⚠️  Filtered out ${filteredLeadsCount} leads (missing timestamp)`);
-  }
-  if (filteredCallsCount > 0) {
-    console.warn(`⚠️  Filtered out ${filteredCallsCount} calls (missing timestamp)`);
-  }
+  // Generate and log daily breakdown (past 4 days)
+  generateAndLogDailyBreakdown(normalizedLeads, normalizedCalls, 4);
 
   // Step 2: Match leads with calls
   const matchMap = matchLeadsWithCalls(normalizedLeads, normalizedCalls);
-  console.log(`✅ Created ${matchMap.size} lead-call matches`);
 
   // Step 3: Group by call center (leads)
   const callCenterGroups = new Map<string, LeadCallMatch[]>();
@@ -91,8 +83,6 @@ export function calculateMetrics(
     }
     callsByCallCenter.get(cc)!.push(call);
   });
-
-  console.log(`✅ Grouped into ${callCenterGroups.size} call centers`);
 
   // Step 4: Calculate metrics per call center
   const byCallCenter: CallCenterMetrics[] = [];
@@ -118,9 +108,6 @@ export function calculateMetrics(
     totalAfterHoursLeads > 0
       ? (totalCallbacks / totalAfterHoursLeads) * 100
       : 0;
-
-  console.log("✅ Metrics calculation complete");
-  console.log(`📈 Totals: ${totalInHoursLeads} in-hours, ${totalAfterHoursLeads} after-hours, ${totalCallbacks} callbacks`);
 
   return {
     totalInHoursLeads,
@@ -161,15 +148,6 @@ function calculateCallCenterMetrics(
   // Track unique leads that received ANY call (for total unique calls)
   const leadsWithCalls = new Set<string>();
 
-  // Debug logging for first call center
-  if (callCenter === "CC1") {
-    console.log(`\n=== DEBUG CC1 Metrics ===`);
-    console.log(`Total matches: ${matches.length}`);
-    console.log(`Total calls from Ringba: ${allCalls.length}`);
-    console.log(`In-hours calls (non-SMS): ${totalInHoursCalls}`);
-    console.log(`After-hours calls (SMS): ${totalAfterHoursCalls}`);
-  }
-
   matches.forEach((match) => {
     const { lead, calls } = match;
 
@@ -195,28 +173,8 @@ function calculateCallCenterMetrics(
       if (hasInHours) {
         inHoursUniqueCalls++;
       }
-
-      // Debug for CC1 in-hours leads
-      if (callCenter === "CC1" && inHoursLeads <= 5) {
-        console.log(`In-hours lead #${inHoursLeads}:`, {
-          phone: lead.phone,
-          timestamp: lead.timestamp,
-          callsCount: calls.length,
-          hasInHoursCall: hasInHours,
-          calls: calls.map(c => ({ publisherName: c.publisherName, isAfterHours: c.isAfterHours }))
-        });
-      }
     }
   });
-
-  // Final debug for CC1
-  if (callCenter === "CC1") {
-    console.log(`In-hours leads: ${inHoursLeads}`);
-    console.log(`In-hours unique calls: ${inHoursUniqueCalls}`);
-    console.log(`After-hours leads: ${afterHoursLeads}`);
-    console.log(`After-hours callbacks: ${afterHoursCallbacks}`);
-    console.log(`===\n`);
-  }
 
   // Total unique calls = number of unique leads that received any call
   totalUniqueCalls = leadsWithCalls.size;

@@ -4,6 +4,7 @@
  */
 
 import type { IrevLead, RingbaCall, NormalizedLead, NormalizedCall } from "@/lib/types";
+import { isAfterHours as isAfterHoursForCenter } from "@/lib/call-center-hours";
 
 /**
  * Normalize call center ID by removing underscores
@@ -41,14 +42,9 @@ export function getCallTimestamp(call: RingbaCall): Date | null {
 }
 
 /**
- * Check if call is after-hours based on publisher_name
- * After-hours = publisher_name contains "SMS" (case-insensitive)
- * Examples: SMS-PP, SMS, Text, etc.
- *
- * Any call WITH "SMS" in publisher_name = after-hours call (callback)
- * Any call WITHOUT "SMS" = in-hours call (regular call)
+ * Check if call is SMS/Text based on publisher_name
  */
-export function isCallAfterHours(call: RingbaCall): boolean {
+export function isCallSMS(call: RingbaCall): boolean {
   if (!call.publisher_name) return false;
   const publisherLower = call.publisher_name.toLowerCase();
 
@@ -58,6 +54,28 @@ export function isCallAfterHours(call: RingbaCall): boolean {
          publisherLower.includes("txt") ||
          publisherLower.includes("message") ||
          publisherLower.includes("messaging");
+}
+
+/**
+ * Check if call is after-hours based on timestamp AND call type
+ *
+ * After-hours call = SMS/Text call that occurs during business hours (recovery callback)
+ * In-hours call = Non-SMS call that occurs during business hours
+ *
+ * Calls outside business hours are NOT counted as in-hours, regardless of type
+ */
+export function isCallAfterHours(call: RingbaCall, timestamp: Date, callCenter: string): boolean {
+  const isSMS = isCallSMS(call);
+  const occurredAfterHours = isAfterHoursForCenter(timestamp, callCenter);
+
+  // SMS/Text calls during business hours = after-hours recovery callbacks
+  if (isSMS && !occurredAfterHours) {
+    return true;
+  }
+
+  // Non-SMS calls outside business hours are NOT counted (filtered out)
+  // Non-SMS calls during business hours = in-hours calls
+  return false;
 }
 
 /**
@@ -78,17 +96,29 @@ export function normalizeLead(lead: IrevLead, isAfterHours: boolean): Normalized
 
 /**
  * Normalize Ringba call to standard format
+ * Only includes calls that occur during business hours
+ * Filters out non-SMS calls that occur outside business hours
  */
 export function normalizeCall(call: RingbaCall): NormalizedCall | null {
   const timestamp = getCallTimestamp(call);
   if (!timestamp) return null;
 
+  const callCenter = normalizeCallCenterId(call.call_center);
+  const isSMS = isCallSMS(call);
+  const occurredAfterHours = isAfterHoursForCenter(timestamp, callCenter);
+
+  // Filter out non-SMS calls that occur outside business hours
+  // These are not counted in any metrics
+  if (!isSMS && occurredAfterHours) {
+    return null;
+  }
+
   return {
-    callCenter: normalizeCallCenterId(call.call_center),
+    callCenter,
     timestamp,
     clickId: call.click_id || null,
     phone: normalizePhoneNumber(call.caller_phone),
-    isAfterHours: isCallAfterHours(call),
+    isAfterHours: isCallAfterHours(call, timestamp, callCenter),
     publisherName: call.publisher_name || null,
   };
 }
